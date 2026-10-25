@@ -245,7 +245,7 @@ export default function Friends() {
         <Label>
           {friends.length} {friends.length === 1 ? 'FRIEND' : 'FRIENDS'} · TAP TO SORT INTO CIRCLES
         </Label>
-        {friends.length === 0 && <Text style={styles.muted}>No friends yet. Share your code above.</Text>}
+        {friends.length === 0 && <Text style={styles.muted}>No friends yet. Invite a mate above.</Text>}
         {friends.map((f) => {
           const inCircles = circles.filter((c) => c.member_ids.includes(f.id)).map((c) => c.name);
           return (
