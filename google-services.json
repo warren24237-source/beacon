@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "316750810472",
+    "project_id": "beacon-4ded1",
+    "storage_bucket": "beacon-4ded1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:316750810472:android:90823f5cf196c634a2dadd",
+        "android_client_info": {
+          "package_name": "com.warrenporter.beacon"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAOaOteJFNWCOKV8pkPDGIgK_JnoJhE2ns"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
