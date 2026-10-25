@@ -39,6 +39,17 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "799f9108-1c3f-40e3-a13d-4e64365b5259"
+      }
+    },
+    "owner": "wazap242"
   }
 }
