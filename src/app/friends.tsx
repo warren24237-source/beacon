@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { INSTALL_LINK } from '@/lib/invite';
@@ -8,7 +8,7 @@ import { fetchCircles, fetchFriends, type Circle, type Friend } from '@/lib/beac
 import { findContactsOnBeacon, type ContactMatch } from '@/lib/contacts';
 import { normaliseWhatsAppNumber } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Chip, Chips, colors, ErrorText, Label, ScrollScreen } from '@/lib/ui';
+import { border, Button, Card, Chip, Chips, colors, ErrorText, Label, ScrollScreen, shadow, Text, TextInput } from '@/lib/ui';
 
 export default function Friends() {
   const { profile, session } = useAuth();
@@ -134,7 +134,7 @@ export default function Friends() {
 
       {requests.length > 0 && (
         <View style={styles.group}>
-          <Label>FRIEND REQUESTS</Label>
+          <Label>Friend requests</Label>
           {requests.map((r) => (
             <View key={r.from_id} style={styles.friendRow}>
               <View style={styles.avatar}>
@@ -153,7 +153,7 @@ export default function Friends() {
       )}
 
       <View style={styles.group}>
-        <Label>FIND FRIENDS</Label>
+        <Label>Find friends</Label>
         <Button label={contacts ? 'Check contacts again' : 'Find friends in my contacts'} onPress={refreshContacts} busy={contactsBusy} />
         {contacts && contacts.length === 0 && <Text style={styles.muted}>None of your contacts are on Beacon yet. Share your code below.</Text>}
         {contacts?.map((m) => (
@@ -192,7 +192,7 @@ export default function Friends() {
       </View>
 
       <Card>
-        <Label>YOUR FRIEND CODE</Label>
+        <Label>Your friend code</Label>
         <Text style={styles.code} selectable>
           {myCode ?? '...'}
         </Text>
@@ -200,7 +200,7 @@ export default function Friends() {
       </Card>
 
       <View style={styles.group}>
-        <Label>ADD A FRIEND&apos;S CODE</Label>
+        <Label>Add a friend&apos;s code</Label>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TextInput
             value={code}
@@ -219,7 +219,7 @@ export default function Friends() {
       </View>
 
       <View style={styles.group}>
-        <Label>YOUR CIRCLES · ONLY YOU SEE THESE</Label>
+        <Label>Your circles · only you see these</Label>
         <Chips>
           {circles.map((c) => (
             <Chip key={c.id} label={c.name} sub={String(c.member_ids.length)} onPress={() => {}} />
@@ -243,7 +243,7 @@ export default function Friends() {
 
       <View style={styles.group}>
         <Label>
-          {friends.length} {friends.length === 1 ? 'FRIEND' : 'FRIENDS'} · TAP TO SORT INTO CIRCLES
+          {friends.length} {friends.length === 1 ? 'friend' : 'friends'} · tap to sort into circles
         </Label>
         {friends.length === 0 && <Text style={styles.muted}>No friends yet. Invite a mate above.</Text>}
         {friends.map((f) => {
@@ -275,7 +275,7 @@ export default function Friends() {
 
       {circles.length > 0 && (
         <View style={styles.group}>
-          <Label>REMOVE A CIRCLE</Label>
+          <Label>Remove a circle</Label>
           <Chips>
             {circles.map((c) => (
               <Chip key={c.id} label={`Delete ${c.name}`} onPress={() => deleteCircle(c)} />
@@ -289,19 +289,19 @@ export default function Friends() {
 
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  h1: { color: colors.text, fontSize: 28, fontWeight: '800' },
-  link: { color: colors.muted, fontSize: 15 },
+  h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
+  link: { color: colors.muted, fontSize: 15, fontWeight: '600' },
   group: { gap: 10 },
   muted: { color: colors.muted, fontSize: 14 },
-  inviteTitle: { color: colors.text, fontSize: 19, fontWeight: '700' },
-  ok: { color: colors.whatsapp, fontSize: 14 },
-  code: { color: colors.accent, fontSize: 32, fontWeight: '800', letterSpacing: 4 },
-  input: { backgroundColor: colors.card, color: colors.text, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13, fontSize: 16 },
-  friend: { gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#2C3340' },
+  inviteTitle: { fontSize: 19, fontWeight: '800' },
+  ok: { fontSize: 14, fontWeight: '800' },
+  code: { alignSelf: 'flex-start', backgroundColor: colors.butter, ...border, ...shadow.select, paddingHorizontal: 10, fontSize: 30, fontWeight: '800', letterSpacing: 4 },
+  input: {},
+  friend: { gap: 10, paddingVertical: 10, borderTopWidth: 2, borderTopColor: colors.ink },
   friendRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#222833', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: colors.text, fontWeight: '700' },
-  name: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  pill: { backgroundColor: colors.accent, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
-  pillText: { color: colors.bg, fontWeight: '700', fontSize: 14 },
+  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.card, borderWidth: 2, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontWeight: '800' },
+  name: { fontSize: 16, fontWeight: '800' },
+  pill: { backgroundColor: colors.accent, ...border, paddingVertical: 6, paddingHorizontal: 12 },
+  pillText: { fontWeight: '800', fontSize: 14 },
 });

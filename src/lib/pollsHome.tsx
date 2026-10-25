@@ -1,9 +1,9 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { fetchPolls, tally, type Poll } from './polls';
-import { Button, colors, Label } from './ui';
+import { border, Button, colors, Label, shadow, Text } from './ui';
 
 // The "Find a date" tab on home: ones you organised, ones you've been asked to.
 export function PollsHome({ userId }: { userId: string }) {
@@ -27,7 +27,7 @@ export function PollsHome({ userId }: { userId: string }) {
 
       {asked.length > 0 && (
         <View style={styles.group}>
-          <Label>YOU&apos;VE BEEN ASKED</Label>
+          <Label>You&apos;ve been asked</Label>
           {asked.map((p) => {
             const me = p.poll_invitees.find((i) => i.user_id === userId);
             return (
@@ -45,7 +45,7 @@ export function PollsHome({ userId }: { userId: string }) {
 
       {mine.length > 0 && (
         <View style={styles.group}>
-          <Label>YOURS</Label>
+          <Label>Yours</Label>
           {mine.map((p) => {
             const t = tally(p);
             return (
@@ -72,7 +72,7 @@ function Item({ title, sub, flag, onPress }: { title: string; sub: string; flag?
     <Pressable onPress={onPress} style={styles.item} accessibilityRole="button">
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.title}>{title}</Text>
-        <Text style={[styles.muted, flag && { color: colors.accent }]}>{sub}</Text>
+        <Text style={[styles.muted, flag && { color: colors.ink, fontWeight: '800' }]}>{sub}</Text>
       </View>
       <Text style={styles.chev}>›</Text>
     </Pressable>
@@ -80,10 +80,10 @@ function Item({ title, sub, flag, onPress }: { title: string; sub: string; flag?
 }
 
 const styles = StyleSheet.create({
-  h1: { color: colors.text, fontSize: 28, fontWeight: '800' },
+  h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
   group: { gap: 10 },
   muted: { color: colors.muted, fontSize: 14 },
-  item: { backgroundColor: colors.card, borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  title: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  chev: { color: colors.muted, fontSize: 20 },
+  item: { backgroundColor: colors.card, ...border, ...shadow.card, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  title: { fontSize: 17, fontWeight: '800' },
+  chev: { fontSize: 22, fontWeight: '800' },
 });

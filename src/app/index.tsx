@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppState, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth';
@@ -29,7 +29,7 @@ import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
 import { PollsHome } from '@/lib/pollsHome';
 import { enableMatchAlerts } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
-import { Body, Button, Card, Chip, Chips, colors, ErrorText, Label } from '@/lib/ui';
+import { Body, border, Button, Card, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
 
 type MyBeacon = Awaited<ReturnType<typeof fetchMyBeacon>>;
 
@@ -132,7 +132,7 @@ export default function Home() {
         <View style={styles.top}>
           <View style={styles.wordmark}>
             <View style={[styles.dot, !mine && styles.dotOff]} />
-            <Text style={styles.wordmarkText}>Beacon</Text>
+            <Text style={styles.wordmarkText}>beacon</Text>
             {incoming.length > 0 ? (
               <Pressable
                 onPress={() => router.push('/lit')}
@@ -140,18 +140,16 @@ export default function Home() {
                 accessibilityRole="button"
                 accessibilityLabel={`${incoming.length} friends lit, see all`}
                 style={styles.litFlag}>
-                <View style={styles.litFlagDot} />
                 <Text style={styles.litFlagText}>{incoming.length} lit</Text>
               </Pressable>
             ) : (
               <View style={[styles.litFlag, styles.litFlagNone]}>
-                <View style={[styles.litFlagDot, { backgroundColor: '#222833' }]} />
-                <Text style={[styles.litFlagText, { color: colors.muted, fontWeight: '500' }]}>None lit</Text>
+                <Text style={[styles.litFlagText, { color: colors.muted, fontWeight: '600' }]}>None lit</Text>
               </View>
             )}
           </View>
           <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
-            <Text style={[styles.link, requestCount > 0 && { color: colors.accent }]}>
+            <Text style={[styles.link, requestCount > 0 && { color: colors.ink, fontWeight: '800' }]}>
               {requestCount > 0 ? `Friends · ${requestCount} new` : `Friends (${friends.length})`}
             </Text>
           </Pressable>
@@ -295,7 +293,7 @@ function Composer({
       <Text style={styles.h1}>{replacing ? 'Change your beacon' : 'Free for something?'}</Text>
 
       <View style={styles.group}>
-        <Label>WHAT · PICK ANY</Label>
+        <Label>What are you up for</Label>
         <Chips>
           {ACTIVITIES.map((a) => (
             <Chip key={a} label={a} on={acts.includes(a)} onPress={() => toggleAct(a)} />
@@ -304,7 +302,7 @@ function Composer({
       </View>
 
       <View style={styles.group}>
-        <Label>WHEN · TODAY</Label>
+        <Label>When · today</Label>
         <Chips>
           {presets.map((p) => (
             <Chip key={p.id} label={p.label} sub={fmtRange(p.start, p.end)} on={windowId === p.id} onPress={() => setWindowId(p.id)} />
@@ -323,7 +321,7 @@ function Composer({
 
       <View style={styles.group}>
         <Label>
-          WHO · {recipientCount} {recipientCount === 1 ? 'FRIEND' : 'FRIENDS'}
+          Who · {recipientCount} {recipientCount === 1 ? 'friend' : 'friends'}
         </Label>
         <Chips>
           <Chip label="Everyone" on={audience.includes('everyone')} onPress={() => toggleAudience('everyone')} />
@@ -334,7 +332,7 @@ function Composer({
       </View>
 
       <View style={styles.group}>
-        <Label>NOTE · OPTIONAL</Label>
+        <Label>Note · optional</Label>
         <TextInput
           value={note}
           onChangeText={setNote}
@@ -384,7 +382,7 @@ function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>;
       </Card>
 
       <View style={styles.group}>
-        <Label>WHO&apos;S IN</Label>
+        <Label>Who&apos;s in</Label>
         {responders.length ? (
           <>
             {responders.map((p) => (
@@ -393,9 +391,7 @@ function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>;
                   <Text style={styles.avatarText}>{p.full_name[0]}</Text>
                 </View>
                 <Text style={[styles.body, { flex: 1 }]}>{p.full_name}</Text>
-                <Pressable style={styles.waPill} onPress={() => openWhatsApp(replyText, p.phone_number)} accessibilityRole="button">
-                  <Text style={styles.waPillText}>Message</Text>
-                </Pressable>
+                <Button label="Message" whatsapp compact onPress={() => openWhatsApp(replyText, p.phone_number)} />
               </View>
             ))}
             <Button label="Other chat or group" secondary onPress={() => openWhatsApp(replyText)} />
@@ -423,48 +419,29 @@ function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>;
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: 22, gap: 22, paddingBottom: 48 },
+  scroll: { padding: 22, gap: 20, paddingBottom: 48 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   wordmark: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  litFlag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 4,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    backgroundColor: 'rgba(245,165,36,0.16)',
-    borderRadius: 999,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  tabs: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 12, padding: 4, gap: 4 },
-  tab: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
-  tabOn: { backgroundColor: '#222833' },
-  tabText: { color: colors.muted, fontSize: 14, fontWeight: '500' },
-  tabTextOn: { color: colors.text, fontWeight: '700' },
-  litFlagNone: { borderColor: '#2C3340', backgroundColor: 'transparent' },
-  litFlagDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
-  litFlagText: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  wordmarkText: { color: colors.text, fontSize: 17, fontWeight: '800' },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
-  dotOff: { backgroundColor: '#222833' },
-  link: { color: colors.muted, fontSize: 15 },
-  h1: { color: colors.text, fontSize: 28, fontWeight: '800' },
+  wordmarkText: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
+  dot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.accent, borderWidth: 2, borderColor: colors.ink },
+  dotOff: { backgroundColor: colors.card },
+  litFlag: { marginLeft: 6, backgroundColor: colors.butter, ...border, borderRadius: 3, ...shadow.select, paddingVertical: 1, paddingHorizontal: 8 },
+  litFlagNone: { backgroundColor: 'transparent', borderColor: colors.muted, boxShadow: 'none' },
+  litFlagText: { fontSize: 13, fontWeight: '800' },
+  tabs: { flexDirection: 'row', backgroundColor: colors.card, ...border, overflow: 'hidden' },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  tabOn: { backgroundColor: colors.ink },
+  tabText: { fontSize: 14, fontWeight: '600' },
+  tabTextOn: { color: colors.bg, fontWeight: '800' },
+  link: { color: colors.muted, fontSize: 15, fontWeight: '600' },
+  h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
   group: { gap: 10 },
   muted: { color: colors.muted, fontSize: 14 },
-  mutedSmall: { color: colors.muted, fontSize: 12 },
-  body: { color: colors.text, fontSize: 16 },
-  input: { backgroundColor: colors.card, color: colors.text, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13, fontSize: 16 },
-  cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  quote: { color: colors.text, fontSize: 15, fontStyle: 'italic' },
-  waPill: { backgroundColor: colors.whatsapp, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
-  waPillText: { color: '#06260F', fontWeight: '700', fontSize: 14 },
+  body: { fontSize: 16 },
+  input: {},
+  cardTitle: { fontSize: 19, fontWeight: '800' },
+  quote: { fontSize: 15 },
   person: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#222833', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: colors.text, fontWeight: '700' },
-  in: { color: colors.whatsapp, fontWeight: '700', fontSize: 14 },
-  incoming: { backgroundColor: colors.card, borderRadius: 18, padding: 18, gap: 10, borderWidth: 1, borderColor: colors.accent },
-  incomingHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  incomingTitle: { color: colors.accent, fontSize: 14, fontWeight: '700' },
+  avatar: { width: 36, height: 36, backgroundColor: colors.card, ...border, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontWeight: '800' },
 });

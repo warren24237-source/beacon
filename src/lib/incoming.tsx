@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { activityPhrase, activityTitle, fetchFriendsBeacons, fmtRange, openWhatsApp } from './beacon';
+import { activityPhrase, activityTitle, fetchFriendsBeacons, fmtRange, fmtTime, openWhatsApp } from './beacon';
 import { supabase } from './supabase';
-import { Button, colors, ErrorText } from './ui';
+import { border, Button, colors, ErrorText, shadow, Text } from './ui';
 
 export type FriendBeacon = Awaited<ReturnType<typeof fetchFriendsBeacons>>[number];
 
@@ -41,18 +41,12 @@ export function IncomingBeacon({
   }
 
   return (
-    <View style={styles.incoming}>
-      <View style={styles.incomingHead}>
-        <Text style={styles.incomingTitle}>{name}&apos;s free.</Text>
-        {hidden ? (
-          <Text style={styles.tag}>Hidden from home</Text>
-        ) : onHide ? (
-          <Pressable onPress={onHide} hitSlop={12} accessibilityRole="button" accessibilityLabel={`Hide ${name}'s beacon`}>
-            <Text style={styles.link}>Hide</Text>
-          </Pressable>
-        ) : null}
+    <View style={styles.card}>
+      <View style={styles.head}>
+        <Text style={styles.name}>{name}&apos;s free</Text>
+        <Text style={styles.till}>till {fmtTime(end)}</Text>
       </View>
-      <Text style={styles.cardTitle}>
+      <Text style={styles.what}>
         {activityTitle(beacon.activities)} · {fmtRange(start, end)}
       </Text>
       {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
@@ -64,21 +58,32 @@ export function IncomingBeacon({
           <Button label="Other chat or group" secondary onPress={() => openWhatsApp(inText)} />
         </>
       ) : (
-        <Button label="I'm in" onPress={imIn} busy={busy} />
+        <View style={styles.actions}>
+          <Button label="I'm in" variant="accent" compact onPress={imIn} busy={busy} />
+          {hidden ? (
+            <Text style={styles.tag}>Hidden from home</Text>
+          ) : onHide ? (
+            <Pressable onPress={onHide} hitSlop={12} accessibilityRole="button" accessibilityLabel={`Hide ${name}'s beacon`}>
+              <Text style={styles.link}>Hide</Text>
+            </Pressable>
+          ) : null}
+        </View>
       )}
-      <Text style={styles.mutedSmall}>Only {name} sees who&apos;s in. Hiding is silent.</Text>
+      <Text style={styles.small}>Only {name} sees who&apos;s in. Hiding is silent.</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  incoming: { backgroundColor: colors.card, borderRadius: 18, padding: 18, gap: 10, borderWidth: 1, borderColor: colors.accent },
-  incomingHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  incomingTitle: { color: colors.accent, fontSize: 14, fontWeight: '700' },
-  link: { color: colors.muted, fontSize: 15 },
-  tag: { color: colors.muted, fontSize: 12, borderWidth: 1, borderColor: '#2C3340', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
-  cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  quote: { color: colors.text, fontSize: 15, fontStyle: 'italic' },
-  in: { color: colors.whatsapp, fontWeight: '700', fontSize: 14 },
-  mutedSmall: { color: colors.muted, fontSize: 12 },
+  card: { backgroundColor: colors.card, ...border, ...shadow.card, padding: 14, gap: 6 },
+  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
+  name: { fontSize: 19, fontWeight: '800', letterSpacing: -0.2, flexShrink: 1 },
+  till: { color: colors.muted, fontSize: 13 },
+  what: { fontSize: 15, fontWeight: '600' },
+  quote: { fontSize: 15 },
+  actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  link: { color: colors.muted, fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },
+  tag: { color: colors.muted, fontSize: 12, fontWeight: '600' },
+  in: { fontWeight: '800', fontSize: 15 },
+  small: { color: colors.muted, fontSize: 12 },
 });
