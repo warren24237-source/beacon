@@ -19,7 +19,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.warrenporter.beacon"
+      "package": "com.warrenporter.beacon",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "output": "static",
@@ -50,6 +53,12 @@
         "projectId": "799f9108-1c3f-40e3-a13d-4e64365b5259"
       }
     },
-    "owner": "wazap242"
+    "owner": "wazap242",
+    "updates": {
+      "url": "https://u.expo.dev/799f9108-1c3f-40e3-a13d-4e64365b5259"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }
