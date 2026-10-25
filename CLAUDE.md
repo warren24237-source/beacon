@@ -17,6 +17,8 @@ Project docs (brief, decisions, roadmap, open questions) live in Warren's OneDri
 - Expo (SDK 58, Expo Router, TypeScript) + Supabase. Android first.
 - Broadcast model (25 Oct): 6-character friend codes make two-way friendships; private circles; beacon audience = Everyone or chosen circles; "I'm in" notifies the owner and opens WhatsApp. Schema in migrations 0003 to 0005. Pushes are sent from Postgres via pg_net to Expo's push API.
 - No sign-in screen: joining (invite code `join-me` + first name + required WhatsApp number) creates a Supabase anonymous account. Reinstalling means re-joining. Numbers visible only to friends.
+- Friends: codes connect instantly; adding by number or from phone contacts (expo-contacts, numbers matched server-side, never stored) sends a request the other person accepts (migration 0006).
+- App version 1.1.0 = runtime 1.1.0 (contacts native module). Bump `version` in app.json whenever a native module is added, so OTA updates never reach a build without it.
 - No location in v1. Push notifications on a match (needs an EAS development build, not Expo Go).
 
 ## Layout

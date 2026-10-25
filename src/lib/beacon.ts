@@ -93,6 +93,23 @@ export async function saveAudience(a: string[]) {
   } catch {}
 }
 
+// Hidden friends' beacons (per phone, silent) -------------------------------------
+
+const HIDDEN_KEY = 'beacon:hidden';
+export async function loadHidden(): Promise<string[]> {
+  try {
+    const v = await AsyncStorage.getItem(HIDDEN_KEY);
+    return v ? JSON.parse(v) : [];
+  } catch {
+    return [];
+  }
+}
+export async function saveHidden(ids: string[]) {
+  try {
+    await AsyncStorage.setItem(HIDDEN_KEY, JSON.stringify(ids.slice(-200)));
+  } catch {}
+}
+
 // WhatsApp ------------------------------------------------------------------------
 
 /** Opens WhatsApp with the message ready. With a number it goes straight to that chat;

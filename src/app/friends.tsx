@@ -4,6 +4,8 @@ import { Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-nativ
 
 import { useAuth } from '@/lib/auth';
 import { fetchCircles, fetchFriends, type Circle, type Friend } from '@/lib/beacon';
+import { findContactsOnBeacon, type ContactMatch } from '@/lib/contacts';
+import { normaliseWhatsAppNumber } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Chip, Chips, colors, ErrorText, Label, ScrollScreen } from '@/lib/ui';
 
@@ -18,12 +20,17 @@ export default function Friends() {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [requests, setRequests] = useState<{ from_id: string; full_name: string }[]>([]);
+  const [contacts, setContacts] = useState<ContactMatch[] | null>(null);
+  const [contactsBusy, setContactsBusy] = useState(false);
+  const [number, setNumber] = useState('');
   const myCode = profile?.friend_code ?? undefined;
 
   const load = useCallback(async () => {
-    const [f, c] = await Promise.all([fetchFriends(), fetchCircles()]);
+    const [f, c, r] = await Promise.all([fetchFriends(), fetchCircles(), supabase.rpc('incoming_friend_requests')]);
     setFriends(f);
     setCircles(c);
+    setRequests((r.data ?? []) as { from_id: string; full_name: string }[]);
   }, []);
   useFocusEffect(
     useCallback(() => {
@@ -41,6 +48,41 @@ export default function Friends() {
     if (error) return setError(error.message);
     setCode('');
     setMsg(`You and ${data} are now friends.`);
+    load();
+  }
+
+  async function respond(fromId: string, accept: boolean) {
+    await supabase.rpc('respond_friend_request', { p_from: fromId, p_accept: accept });
+    load();
+    if (contacts) refreshContacts();
+  }
+
+  async function refreshContacts() {
+    setError('');
+    setContactsBusy(true);
+    const res = await findContactsOnBeacon();
+    setContactsBusy(false);
+    if (!res.ok) return setError(res.reason);
+    setContacts(res.matches);
+  }
+
+  async function requestContact(m: ContactMatch) {
+    setError('');
+    const { data, error } = await supabase.rpc('request_friend', { p_user_id: m.id });
+    if (error) return setError(error.message);
+    setContacts((cs) => (cs ?? []).map((c) => (c.id === m.id ? { ...c, status: data === 'friends' ? 'friends' : 'requested' } : c)));
+    if (data === 'friends') load();
+  }
+
+  async function requestByNumber() {
+    setError('');
+    setMsg('');
+    const n = normaliseWhatsAppNumber(number);
+    if (!n) return setError('That number does not look right. Try e.g. 07700 900123.');
+    const { data, error } = await supabase.rpc('request_friend_by_phone', { p_phone_number: n });
+    if (error) return setError(error.message);
+    setNumber('');
+    setMsg(data === 'friends' ? 'You are now friends.' : 'Request sent. They need to accept it.');
     load();
   }
 
@@ -77,17 +119,76 @@ export default function Friends() {
         </Pressable>
       </View>
 
+      {requests.length > 0 && (
+        <View style={styles.group}>
+          <Label>FRIEND REQUESTS</Label>
+          {requests.map((r) => (
+            <View key={r.from_id} style={styles.friendRow}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{r.full_name[0]}</Text>
+              </View>
+              <Text style={[styles.name, { flex: 1 }]}>{r.full_name}</Text>
+              <Pressable style={styles.pill} onPress={() => respond(r.from_id, true)}>
+                <Text style={styles.pillText}>Accept</Text>
+              </Pressable>
+              <Pressable onPress={() => respond(r.from_id, false)} hitSlop={8}>
+                <Text style={styles.link}>Decline</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View style={styles.group}>
+        <Label>FIND FRIENDS</Label>
+        <Button label={contacts ? 'Check contacts again' : 'Find friends in my contacts'} onPress={refreshContacts} busy={contactsBusy} />
+        {contacts && contacts.length === 0 && <Text style={styles.muted}>None of your contacts are on Beacon yet. Share your code below.</Text>}
+        {contacts?.map((m) => (
+          <View key={m.id} style={styles.friendRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{m.full_name[0]}</Text>
+            </View>
+            <Text style={[styles.name, { flex: 1 }]}>{m.full_name}</Text>
+            {m.status === 'friends' && <Text style={styles.muted}>Friends</Text>}
+            {m.status === 'requested' && <Text style={styles.muted}>Requested</Text>}
+            {m.status === 'incoming' && (
+              <Pressable style={styles.pill} onPress={() => respond(m.id, true)}>
+                <Text style={styles.pillText}>Accept</Text>
+              </Pressable>
+            )}
+            {m.status === 'none' && (
+              <Pressable style={styles.pill} onPress={() => requestContact(m)}>
+                <Text style={styles.pillText}>Add</Text>
+              </Pressable>
+            )}
+          </View>
+        ))}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TextInput
+            value={number}
+            onChangeText={setNumber}
+            keyboardType="phone-pad"
+            placeholder="Or add by mobile number"
+            placeholderTextColor={colors.muted}
+            style={[styles.input, { flex: 1 }]}
+          />
+          <View style={{ width: 90 }}>
+            <Button label="Add" secondary onPress={requestByNumber} />
+          </View>
+        </View>
+      </View>
+
       <Card>
         <Label>YOUR FRIEND CODE</Label>
         <Text style={styles.code} selectable>
           {myCode ?? '...'}
         </Text>
-        <Text style={styles.muted}>Send it to a mate. When they add it, you&apos;re friends both ways.</Text>
+        <Text style={styles.muted}>For mates not in your contacts. When they add it, you&apos;re friends straight away.</Text>
         <Button label="Share my code" onPress={() => Share.share({ message: shareText })} />
       </Card>
 
       <View style={styles.group}>
-        <Label>ADD A FRIEND</Label>
+        <Label>ADD A FRIEND&apos;S CODE</Label>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TextInput
             value={code}
@@ -188,4 +289,6 @@ const styles = StyleSheet.create({
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#222833', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: colors.text, fontWeight: '700' },
   name: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  pill: { backgroundColor: colors.accent, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
+  pillText: { color: colors.bg, fontWeight: '700', fontSize: 14 },
 });

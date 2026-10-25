@@ -17,9 +17,11 @@ import {
   fmtTime,
   halfHourSlots,
   loadAudience,
+  loadHidden,
   openWhatsApp,
   presetWindows,
   saveAudience,
+  saveHidden,
   type Circle,
   type Friend,
 } from '@/lib/beacon';
@@ -40,12 +42,20 @@ export default function Home() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [circles, setCircles] = useState<Circle[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
+  const [requestCount, setRequestCount] = useState(0);
   const [composing, setComposing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [m, inc, f, c] = await Promise.all([fetchMyBeacon(userId), fetchFriendsBeacons(userId), fetchFriends(), fetchCircles()]);
+    const [m, inc, f, c, r] = await Promise.all([
+      fetchMyBeacon(userId),
+      fetchFriendsBeacons(userId),
+      fetchFriends(),
+      fetchCircles(),
+      supabase.rpc('incoming_friend_requests'),
+    ]);
+    setRequestCount((r.data ?? []).length);
     setMine(m);
     setIncoming(inc);
     setFriends(f);
@@ -59,6 +69,10 @@ export default function Home() {
       return () => clearInterval(t);
     }, [load])
   );
+
+  useEffect(() => {
+    loadHidden().then(setHidden);
+  }, []);
 
   useEffect(() => {
     const a = AppState.addEventListener('change', (s) => s === 'active' && load());
@@ -92,7 +106,9 @@ export default function Home() {
             <Text style={styles.wordmarkText}>Beacon</Text>
           </View>
           <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
-            <Text style={styles.link}>Friends ({friends.length})</Text>
+            <Text style={[styles.link, requestCount > 0 && { color: colors.accent }]}>
+              {requestCount > 0 ? `Friends · ${requestCount} new` : `Friends (${friends.length})`}
+            </Text>
           </Pressable>
         </View>
 
@@ -102,7 +118,13 @@ export default function Home() {
             beacon={b}
             meIn={b.responses.some((r) => r.user_id === userId)}
             onDone={load}
-            onHide={() => setHidden((h) => [...h, b.id])}
+            onHide={() =>
+              setHidden((h) => {
+                const next = [...h, b.id];
+                saveHidden(next);
+                return next;
+              })
+            }
           />
         ))}
 
@@ -373,7 +395,12 @@ function IncomingBeacon({
 
   return (
     <View style={styles.incoming}>
-      <Text style={styles.incomingTitle}>{name}&apos;s free.</Text>
+      <View style={styles.incomingHead}>
+        <Text style={styles.incomingTitle}>{name}&apos;s free.</Text>
+        <Pressable onPress={onHide} hitSlop={12} accessibilityRole="button" accessibilityLabel={`Hide ${name}'s beacon`}>
+          <Text style={styles.link}>Hide</Text>
+        </Pressable>
+      </View>
       <Text style={styles.cardTitle}>
         {activityTitle(beacon.activities)} · {fmtRange(start, end)}
       </Text>
@@ -386,16 +413,9 @@ function IncomingBeacon({
           <Button label="Other chat or group" secondary onPress={() => openWhatsApp(inText)} />
         </>
       ) : (
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <View style={{ flex: 1 }}>
-            <Button label="I'm in" onPress={imIn} busy={busy} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Button label="Not this time" secondary onPress={onHide} />
-          </View>
-        </View>
+        <Button label="I'm in" onPress={imIn} busy={busy} />
       )}
-      <Text style={styles.mutedSmall}>Only {name} sees who&apos;s in.</Text>
+      <Text style={styles.mutedSmall}>Only {name} sees who&apos;s in. Hiding is silent.</Text>
     </View>
   );
 }
@@ -424,5 +444,6 @@ const styles = StyleSheet.create({
   avatarText: { color: colors.text, fontWeight: '700' },
   in: { color: colors.whatsapp, fontWeight: '700', fontSize: 14 },
   incoming: { backgroundColor: colors.card, borderRadius: 18, padding: 18, gap: 10, borderWidth: 1, borderColor: colors.accent },
+  incomingHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   incomingTitle: { color: colors.accent, fontSize: 14, fontWeight: '700' },
 });

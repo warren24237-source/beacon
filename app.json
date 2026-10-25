@@ -2,7 +2,7 @@
   "expo": {
     "name": "Beacon",
     "slug": "beacon",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "beacon",
@@ -43,6 +43,12 @@
         "expo-notifications",
         {
           "color": "#F5A524"
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Beacon checks your contacts to find friends who are on Beacon. Numbers are never stored."
         }
       ]
     ],
