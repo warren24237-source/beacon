@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -66,7 +67,9 @@ export function TextInput({ style, ...props }: TextInputProps) {
 export function Screen({ children }: { children: ReactNode }) {
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.inner}>{children}</View>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <View style={styles.inner}>{children}</View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -74,9 +77,12 @@ export function Screen({ children }: { children: ReactNode }) {
 export function ScrollScreen({ children }: { children: ReactNode }) {
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {children}
-      </ScrollView>
+      {/* Shrink the screen when the keyboard opens, so the field being typed in stays visible. */}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppState, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, KeyboardAvoidingView, Platform, type ScrollViewInstance, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth';
@@ -58,6 +58,7 @@ export default function Home() {
   const [requestCount, setRequestCount] = useState(0);
   const [composing, setComposing] = useState(false);
   const [tab, setTab] = useState<'now' | 'date'>('now');
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -125,7 +126,9 @@ export default function Home() {
 
   return (
     <SafeAreaView style={styles.screen}>
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}>
@@ -192,6 +195,7 @@ export default function Home() {
             friends={friends}
             circles={circles}
             replacing={!!mine}
+            onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
             onCancel={mine ? () => setComposing(false) : undefined}
             onLit={async () => {
               setComposing(false);
@@ -202,6 +206,7 @@ export default function Home() {
           mine && <LitBeacon beacon={mine} onChange={() => setComposing(true)} onOut={load} />
         ))}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -215,6 +220,7 @@ function Composer({
   replacing,
   onCancel,
   onLit,
+  onNoteFocus,
 }: {
   userId: string;
   friends: Friend[];
@@ -222,6 +228,7 @@ function Composer({
   replacing: boolean;
   onCancel?: () => void;
   onLit: () => void;
+  onNoteFocus?: () => void;
 }) {
   const presets = useMemo(() => presetWindows(), []);
   const slots = useMemo(() => halfHourSlots(), []);
@@ -336,6 +343,7 @@ function Composer({
         <TextInput
           value={note}
           onChangeText={setNote}
+          onFocus={onNoteFocus}
           maxLength={80}
           placeholder="e.g. Anyone fancy the Christmas market?"
           placeholderTextColor={colors.muted}
