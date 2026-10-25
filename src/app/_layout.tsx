@@ -17,18 +17,15 @@ function Routes() {
 
   if (loading) return null;
 
-  const signedIn = !!session;
-  const joined = !!profile;
+  // No sign-in screen: joining with the invite code creates an anonymous account.
+  const joined = !!session && !!profile;
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-      <Stack.Protected guard={!signedIn}>
-        <Stack.Screen name="sign-in" />
-      </Stack.Protected>
-      <Stack.Protected guard={signedIn && !joined}>
+      <Stack.Protected guard={!joined}>
         <Stack.Screen name="join" />
       </Stack.Protected>
-      <Stack.Protected guard={signedIn && joined}>
+      <Stack.Protected guard={joined}>
         <Stack.Screen name="index" />
       </Stack.Protected>
     </Stack>

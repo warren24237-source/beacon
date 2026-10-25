@@ -21,6 +21,14 @@ export default function Join() {
     if (!number) return setError('That WhatsApp number doesn\'t look right.');
 
     setBusy(true);
+    const { data: current } = await supabase.auth.getSession();
+    if (!current.session) {
+      const { error: authError } = await supabase.auth.signInAnonymously();
+      if (authError) {
+        setBusy(false);
+        return setError(authError.message);
+      }
+    }
     const { error } = await supabase.rpc('join_group', {
       p_invite_code: inviteCode.trim(),
       p_full_name: name.trim(),
@@ -36,8 +44,8 @@ export default function Join() {
 
   return (
     <Screen>
-      <Title>Join the group</Title>
-      <Body muted>One-off setup. Your number is only used to open WhatsApp when you match.</Body>
+      <Title>Beacon</Title>
+      <Body muted>Know when your mates are free. Nobody sees your status unless you match. Your number is only used to open WhatsApp.</Body>
       <Field value={inviteCode} onChangeText={setInviteCode} placeholder="Invite code" autoCapitalize="none" />
       <Field value={name} onChangeText={setName} placeholder="Your first name" autoComplete="given-name" />
       <Field
@@ -49,7 +57,6 @@ export default function Join() {
       />
       <ErrorText>{error}</ErrorText>
       <Button label="Join" onPress={join} busy={busy} />
-      <Button label="Sign out" secondary onPress={() => supabase.auth.signOut()} />
     </Screen>
   );
 }

@@ -16,11 +16,11 @@ Project docs (brief, decisions, roadmap, open questions) live in Warren's OneDri
 ## Decided so far
 - Expo (SDK 58, Expo Router, TypeScript) + Supabase. Android first.
 - One shared group, gated by one invite code (`app_settings.invite_code`, checked in `join_group()`).
-- Sign-in: Supabase email one-time code. WhatsApp number typed once, stored as digits only.
+- No sign-in screen: joining (invite code, name, WhatsApp number) creates a Supabase anonymous account. Reinstalling means re-joining. Number stored as digits only.
 - No location in v1. Push notifications on a match (needs an EAS development build, not Expo Go).
 
 ## Layout
-- `src/app/`: screens (Expo Router). `sign-in` → `join` → `index` (home), guarded in `_layout.tsx`.
+- `src/app/`: screens (Expo Router). `join` → `index` (home), guarded in `_layout.tsx`.
 - `src/lib/`: Supabase client, auth context, phone formatting, shared UI.
 - `supabase/migrations/`: SQL, run by hand in the Supabase SQL Editor, in order.
 

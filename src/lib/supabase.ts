@@ -1,14 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-if (!supabaseUrl || !supabasePublishableKey) {
-  throw new Error(
-    'Missing Supabase settings. Copy .env.example to .env and fill in EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY.'
-  );
-}
+// Publishable keys are designed to ship inside apps; row level security protects the data.
+// Override with EXPO_PUBLIC_* variables in .env if you point at a different project.
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://kwkkqtghpihpxzuzjyag.supabase.co';
+const supabasePublishableKey =
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? 'sb_publishable_iG1a32e5ohh-eLTr6Irytg_ykDCzXCV';
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
