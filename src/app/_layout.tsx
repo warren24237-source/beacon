@@ -34,6 +34,7 @@ function Routes() {
       <Stack.Protected guard={joined && hasPhone}>
         <Stack.Screen name="index" />
         <Stack.Screen name="friends" />
+        <Stack.Screen name="lit" />
       </Stack.Protected>
     </Stack>
   );

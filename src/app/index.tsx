@@ -7,7 +7,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/auth';
 import {
   ACTIVITIES,
-  activityPhrase,
   activityTitle,
   fetchCircles,
   fetchFriends,
@@ -26,12 +25,12 @@ import {
   type Friend,
 } from '@/lib/beacon';
 import { BeaconGlow } from '@/lib/glow';
+import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
 import { enableMatchAlerts } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
 import { Body, Button, Card, Chip, Chips, colors, ErrorText, Label } from '@/lib/ui';
 
 type MyBeacon = Awaited<ReturnType<typeof fetchMyBeacon>>;
-type FriendBeacon = Awaited<ReturnType<typeof fetchFriendsBeacons>>[number];
 
 export default function Home() {
   const { session } = useAuth();
@@ -110,6 +109,22 @@ export default function Home() {
           <View style={styles.wordmark}>
             <View style={[styles.dot, !mine && styles.dotOff]} />
             <Text style={styles.wordmarkText}>Beacon</Text>
+            {incoming.length > 0 ? (
+              <Pressable
+                onPress={() => router.push('/lit')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`${incoming.length} friends lit, see all`}
+                style={styles.litFlag}>
+                <View style={styles.litFlagDot} />
+                <Text style={styles.litFlagText}>{incoming.length} lit</Text>
+              </Pressable>
+            ) : (
+              <View style={[styles.litFlag, styles.litFlagNone]}>
+                <View style={[styles.litFlagDot, { backgroundColor: '#222833' }]} />
+                <Text style={[styles.litFlagText, { color: colors.muted, fontWeight: '500' }]}>None lit</Text>
+              </View>
+            )}
           </View>
           <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
             <Text style={[styles.link, requestCount > 0 && { color: colors.accent }]}>
@@ -367,70 +382,26 @@ function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>;
   );
 }
 
-// A friend's beacon -----------------------------------------------------------------
-
-function IncomingBeacon({
-  beacon,
-  meIn,
-  onDone,
-  onHide,
-}: {
-  beacon: FriendBeacon;
-  meIn: boolean;
-  onDone: () => void;
-  onHide: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const name = beacon.owner?.full_name ?? 'A friend';
-  const start = new Date(beacon.start_time);
-  const end = new Date(beacon.end_time);
-
-  const phone = beacon.owner?.phone_number ?? null;
-  const inText = `I'm in for ${activityPhrase(beacon.activities)}! ${fmtRange(start, end)} works. Where are we going?`;
-
-  async function imIn() {
-    setBusy(true);
-    setError('');
-    const { error } = await supabase.rpc('im_in', { p_beacon_id: beacon.id });
-    setBusy(false);
-    if (error) return setError(error.message);
-    onDone();
-    openWhatsApp(inText, phone);
-  }
-
-  return (
-    <View style={styles.incoming}>
-      <View style={styles.incomingHead}>
-        <Text style={styles.incomingTitle}>{name}&apos;s free.</Text>
-        <Pressable onPress={onHide} hitSlop={12} accessibilityRole="button" accessibilityLabel={`Hide ${name}'s beacon`}>
-          <Text style={styles.link}>Hide</Text>
-        </Pressable>
-      </View>
-      <Text style={styles.cardTitle}>
-        {activityTitle(beacon.activities)} · {fmtRange(start, end)}
-      </Text>
-      {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
-      <ErrorText>{error}</ErrorText>
-      {meIn ? (
-        <>
-          <Text style={styles.in}>You&apos;re in. {name} knows.</Text>
-          <Button label={`Message ${name}`} whatsapp onPress={() => openWhatsApp(inText, phone)} />
-          <Button label="Other chat or group" secondary onPress={() => openWhatsApp(inText)} />
-        </>
-      ) : (
-        <Button label="I'm in" onPress={imIn} busy={busy} />
-      )}
-      <Text style={styles.mutedSmall}>Only {name} sees who&apos;s in. Hiding is silent.</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: 22, gap: 22, paddingBottom: 48 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   wordmark: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  litFlag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 4,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(245,165,36,0.16)',
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  litFlagNone: { borderColor: '#2C3340', backgroundColor: 'transparent' },
+  litFlagDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
+  litFlagText: { color: colors.text, fontSize: 13, fontWeight: '700' },
   wordmarkText: { color: colors.text, fontSize: 17, fontWeight: '800' },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
   dotOff: { backgroundColor: '#222833' },

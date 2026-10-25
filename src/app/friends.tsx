@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
+import { INSTALL_LINK } from '@/lib/invite';
 import { fetchCircles, fetchFriends, type Circle, type Friend } from '@/lib/beacon';
 import { findContactsOnBeacon, type ContactMatch } from '@/lib/contacts';
 import { normaliseWhatsAppNumber } from '@/lib/phone';
@@ -108,7 +109,11 @@ export default function Friends() {
     load();
   }
 
-  const shareText = `Add me on Beacon so we can see when each other's free. My friend code: ${myCode}`;
+  const inviteText = `I'm using Beacon to tell mates when I'm free for a drink, coffee or whatever. Fancy it? Android only for now.
+
+1. Install: ${INSTALL_LINK}
+2. Open it and use the join code: join-me
+3. Add me with my code: ${myCode ?? ''}`;
 
   return (
     <ScrollScreen>
@@ -118,6 +123,14 @@ export default function Friends() {
           <Text style={styles.link}>Done</Text>
         </Pressable>
       </View>
+
+      <Card>
+        <Text style={styles.inviteTitle}>Invite a mate to Beacon</Text>
+        <Text style={styles.muted}>
+          Sends one message with the download link, the join code and your friend code. When they join, you&apos;re friends straight away.
+        </Text>
+        <Button label="Invite a mate" onPress={() => Share.share({ message: inviteText })} />
+      </Card>
 
       {requests.length > 0 && (
         <View style={styles.group}>
@@ -183,8 +196,7 @@ export default function Friends() {
         <Text style={styles.code} selectable>
           {myCode ?? '...'}
         </Text>
-        <Text style={styles.muted}>For mates not in your contacts. When they add it, you&apos;re friends straight away.</Text>
-        <Button label="Share my code" onPress={() => Share.share({ message: shareText })} />
+        <Text style={styles.muted}>For mates who already have Beacon. When they add it, you&apos;re friends straight away.</Text>
       </Card>
 
       <View style={styles.group}>
@@ -233,7 +245,7 @@ export default function Friends() {
         <Label>
           {friends.length} {friends.length === 1 ? 'FRIEND' : 'FRIENDS'} · TAP TO SORT INTO CIRCLES
         </Label>
-        {friends.length === 0 && <Text style={styles.muted}>No friends yet. Share your code above.</Text>}
+        {friends.length === 0 && <Text style={styles.muted}>No friends yet. Invite a mate above.</Text>}
         {friends.map((f) => {
           const inCircles = circles.filter((c) => c.member_ids.includes(f.id)).map((c) => c.name);
           return (
@@ -281,6 +293,7 @@ const styles = StyleSheet.create({
   link: { color: colors.muted, fontSize: 15 },
   group: { gap: 10 },
   muted: { color: colors.muted, fontSize: 14 },
+  inviteTitle: { color: colors.text, fontSize: 19, fontWeight: '700' },
   ok: { color: colors.whatsapp, fontSize: 14 },
   code: { color: colors.accent, fontSize: 32, fontWeight: '800', letterSpacing: 4 },
   input: { backgroundColor: colors.card, color: colors.text, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13, fontSize: 16 },
