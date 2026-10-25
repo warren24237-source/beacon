@@ -22,7 +22,8 @@
       "package": "com.warrenporter.beacon",
       "runtimeVersion": {
         "policy": "appVersion"
-      }
+      },
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -36,6 +37,12 @@
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#F5A524"
         }
       ]
     ],
