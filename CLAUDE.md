@@ -5,7 +5,7 @@ Read `AGENTS.md` too: it has the Expo rules (SDK 58, check versioned docs, `npx 
 ## What this is
 One tap tells the friends you choose, across separate circles, that you're free. Friends tap "I'm in" and it hands off to WhatsApp. Solo fun project by Warren Porter. Warren is not learning to code: Claude writes the code, Warren tests on his Android phone and steers the product.
 
-Project docs (brief, decisions, roadmap, open questions) live in Warren's OneDrive Beacon folder, not this repo.
+Project docs (brief, decisions, roadmap, open questions) and the **current status / next steps** live in Warren's OneDrive Beacon folder `CLAUDE.md`, not this repo. If that folder isn't connected, ask Warren to connect it.
 
 ## Product rules (don't break without a logged decision)
 1. No in-app chat. All conversation hands off to WhatsApp: `wa.me/<number>?text=` for the person directly, or `wa.me/?text=` for "Other chat or group".
