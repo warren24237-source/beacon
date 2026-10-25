@@ -74,6 +74,12 @@ export default function Home() {
     loadHidden().then(setHidden);
   }, []);
 
+  // Sign this phone up for notifications straight away, so friends' beacons reach it
+  // even if it has never lit one. Android only asks once.
+  useEffect(() => {
+    if (userId) enableMatchAlerts(userId);
+  }, [userId]);
+
   useEffect(() => {
     const a = AppState.addEventListener('change', (s) => s === 'active' && load());
     const n = Notifications.addNotificationReceivedListener(() => load());
