@@ -1,3 +1,9 @@
+import {
+  BricolageGrotesque_400Regular,
+  BricolageGrotesque_600SemiBold,
+  BricolageGrotesque_800ExtraBold,
+  useFonts,
+} from '@expo-google-fonts/bricolage-grotesque';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -11,7 +17,10 @@ import { colors } from '@/lib/ui';
 SplashScreen.preventAutoHideAsync();
 
 function Routes() {
-  const { loading, session, profile } = useAuth();
+  const { loading: authLoading, session, profile } = useAuth();
+  const [fontsLoaded, fontError] = useFonts({ BricolageGrotesque_400Regular, BricolageGrotesque_600SemiBold, BricolageGrotesque_800ExtraBold });
+  // Carry on with the system font if the fonts fail to load.
+  const loading = authLoading || (!fontsLoaded && !fontError);
 
   useEffect(() => {
     if (!loading) SplashScreen.hideAsync();
@@ -46,7 +55,7 @@ export default function RootLayout() {
   useLiveUpdates();
   return (
     <AuthProvider>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <Routes />
     </AuthProvider>
   );

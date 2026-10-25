@@ -1,13 +1,13 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { openWhatsApp } from '@/lib/beacon';
 import { askCalendar, calendarAllowed, checkDates, type DayCheck } from '@/lib/busy';
 import { fetchPoll, fmtDay, tally, type Poll } from '@/lib/polls';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, colors, ErrorText, ScrollScreen } from '@/lib/ui';
+import { border, Button, Card, colors, ErrorText, ScrollScreen, shadow, Text } from '@/lib/ui';
 
 // One "Find a date": results for the organiser, ticking dates for everyone else.
 export default function PollScreen() {
@@ -127,7 +127,7 @@ export default function PollScreen() {
           </Card>
         )}
         {calNote ? <Text style={styles.note}>{calNote}</Text> : null}
-        <View>
+        <View style={styles.list}>
           {poll.dates.map((day, i) => {
             const on = mine.includes(day);
             return (
@@ -144,7 +144,7 @@ export default function PollScreen() {
                   {cal?.[day]?.allDay.length ? <Text style={styles.muted}>All day: {cal[day].allDay.join(', ')}</Text> : null}
                 </View>
                 <View style={[styles.tick, on && styles.tickOn]}>
-                  <Text style={[styles.tickText, on && { color: colors.bg }]}>{on ? '✓' : ''}</Text>
+                  <Text style={styles.tickText}>{on ? '✓' : ''}</Text>
                 </View>
               </Pressable>
             );
@@ -204,7 +204,7 @@ export default function PollScreen() {
       {isOwner && best.who.length > 0 && (
         <>
           <View style={styles.best}>
-            <Text style={styles.eyebrow}>BEST SO FAR</Text>
+            <Text style={styles.eyebrow}>Best so far</Text>
             <Text style={styles.cardTitle}>
               {fmtDay(best.day)} · {poll.time_label}
             </Text>
@@ -217,7 +217,7 @@ export default function PollScreen() {
       )}
       {isOwner && best.who.length === 0 && <Text style={styles.body}>No answers yet. You&apos;ll get a notification as people answer.</Text>}
 
-      <View>
+      <View style={styles.list}>
         {rows.map((r, i) => (
           <View key={r.day} style={[styles.row, i > 0 && styles.rowLine]}>
             <View style={styles.grow}>
@@ -249,26 +249,27 @@ export default function PollScreen() {
 
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
-  h1: { color: colors.text, fontSize: 26, fontWeight: '800', flex: 1 },
-  link: { color: colors.muted, fontSize: 15, paddingTop: 6 },
+  h1: { fontSize: 30, lineHeight: 32, fontWeight: '800', letterSpacing: -0.7, flex: 1 },
+  link: { color: colors.muted, fontSize: 15, fontWeight: '600', paddingTop: 6 },
   muted: { color: colors.muted, fontSize: 14 },
-  busy: { color: colors.error, fontSize: 13 },
+  busy: { color: colors.error, fontSize: 13, fontWeight: '600' },
   deleteWrap: { alignItems: 'center', paddingVertical: 8 },
-  delete: { color: colors.error, fontSize: 15 },
-  note: { color: colors.accent, fontSize: 14 },
-  body: { color: colors.text, fontSize: 16 },
-  small: { color: colors.text, fontSize: 13 },
-  cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-  rowLine: { borderTopWidth: 1, borderTopColor: '#2C3340' },
+  delete: { color: colors.error, fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },
+  note: { fontSize: 14, fontWeight: '800' },
+  body: { fontSize: 16 },
+  small: { fontSize: 13 },
+  cardTitle: { fontSize: 19, fontWeight: '800' },
+  list: { backgroundColor: colors.card, ...border, ...shadow.card },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 12 },
+  rowLine: { borderTopWidth: 2, borderTopColor: colors.ink },
   grow: { flex: 1, gap: 3 },
-  day: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  tick: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center' },
-  tickOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  tickText: { color: colors.text, fontSize: 20, fontWeight: '700' },
-  best: { borderWidth: 1, borderColor: colors.accent, backgroundColor: 'rgba(245,165,36,0.16)', borderRadius: 16, padding: 16, gap: 4 },
-  eyebrow: { color: colors.accent, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  bar: { height: 6, borderRadius: 3, backgroundColor: '#222833', overflow: 'hidden', marginTop: 4 },
+  day: { fontSize: 16, fontWeight: '800' },
+  tick: { width: 44, height: 44, backgroundColor: colors.card, ...border, alignItems: 'center', justifyContent: 'center' },
+  tickOn: { backgroundColor: colors.butter, ...shadow.select },
+  tickText: { fontSize: 20, fontWeight: '800' },
+  best: { backgroundColor: colors.butter, ...border, ...shadow.card, padding: 16, gap: 4 },
+  eyebrow: { fontSize: 13, fontWeight: '800' },
+  bar: { height: 10, backgroundColor: colors.bg, borderWidth: 1.5, borderColor: colors.ink, overflow: 'hidden', marginTop: 4 },
   barFill: { height: '100%', backgroundColor: colors.accent },
-  count: { color: colors.text, fontSize: 15, fontWeight: '700', minWidth: 40, textAlign: 'right' },
+  count: { fontSize: 15, fontWeight: '800', minWidth: 40, textAlign: 'right' },
 });

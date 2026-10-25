@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { fetchCircles, fetchFriends, type Circle, type Friend } from '@/lib/beacon';
@@ -9,7 +9,7 @@ import { Calendar } from '@/lib/calendar';
 import { DAY_SLOTS, fmtDay, fmtMinutes, parseYmd, TIME_OPTIONS, todayYmd, weeklyDates, ymd } from '@/lib/polls';
 import { enableMatchAlerts } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
-import { Button, Chip, Chips, colors, ErrorText, Field, Label, ScrollScreen } from '@/lib/ui';
+import { Button, Chip, Chips, colors, ErrorText, Field, Label, ScrollScreen, Text } from '@/lib/ui';
 
 const WEEK = [1, 2, 3, 4, 5, 6, 0];
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -130,12 +130,12 @@ export default function FindDate() {
       </View>
 
       <View style={styles.group}>
-        <Label>WHAT&apos;S IT FOR?</Label>
+        <Label>What&apos;s it for?</Label>
         <Field value={title} onChangeText={setTitle} maxLength={40} placeholder="e.g. Christmas drinks" />
       </View>
 
       <View style={styles.group}>
-        <Label>WHICH DATES</Label>
+        <Label>Which dates</Label>
         <Chips>
           <Chip label="Every week" on={mode === 'weekly'} onPress={() => setMode('weekly')} />
           <Chip label="Pick dates" on={mode === 'pick'} onPress={() => setMode('pick')} />
@@ -193,7 +193,7 @@ export default function FindDate() {
       </View>
 
       <View style={styles.group}>
-        <Label>WHAT TIME</Label>
+        <Label>What time</Label>
         <Chips>
           {TIME_OPTIONS.map((t) => (
             <Chip key={t.id} label={t.label} sub={t.range || undefined} on={time === t.id} onPress={() => setTime(t.id)} />
@@ -211,7 +211,7 @@ export default function FindDate() {
 
       <View style={styles.group}>
         <Label>
-          WHO · {count} {count === 1 ? 'FRIEND' : 'FRIENDS'}
+          Who · {count} {count === 1 ? 'friend' : 'friends'}
         </Label>
         <Chips>
           <Chip label="Everyone" on={audience.includes('everyone')} onPress={() => toggleAudience('everyone')} />
@@ -249,10 +249,10 @@ function SlotRow({ value, onChange }: { value: number; onChange: (m: number) => 
 
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  h1: { color: colors.text, fontSize: 28, fontWeight: '800' },
-  link: { color: colors.muted, fontSize: 15 },
+  h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
+  link: { color: colors.muted, fontSize: 15, fontWeight: '600' },
   group: { gap: 10 },
   muted: { color: colors.muted, fontSize: 14 },
-  busy: { color: colors.error, fontSize: 14 },
-  free: { color: colors.whatsapp, fontSize: 14 },
+  busy: { color: colors.error, fontSize: 14, fontWeight: '600' },
+  free: { fontSize: 14, fontWeight: '800' },
 });

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MONTHS, parseYmd, todayYmd, ymd } from './polls';
-import { colors } from './ui';
+import { border, colors, shadow, Text } from './ui';
 
 // A month grid. Tap days to select. Past days are greyed out.
 export function Calendar({ selected, onPress, start }: { selected: string[]; onPress: (day: string) => void; start?: string }) {
@@ -62,16 +62,16 @@ export function Calendar({ selected, onPress, start }: { selected: string[]; onP
 }
 
 const styles = StyleSheet.create({
-  cal: { backgroundColor: colors.card, borderRadius: 16, padding: 12, gap: 8 },
+  cal: { backgroundColor: colors.card, ...border, ...shadow.card, padding: 12, gap: 8 },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 6 },
-  arrow: { color: colors.text, fontSize: 24, paddingHorizontal: 8 },
-  month: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  arrow: { fontSize: 26, fontWeight: '800', paddingHorizontal: 8 },
+  month: { fontSize: 16, fontWeight: '800' },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
-  dow: { color: colors.muted, fontSize: 12, textAlign: 'center', textAlignVertical: 'center', aspectRatio: 2 },
-  day: { width: '84%', aspectRatio: 1, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
-  dayOn: { backgroundColor: colors.accent },
-  dayText: { color: colors.text, fontSize: 15 },
-  dayTextOn: { color: colors.bg, fontWeight: '700' },
-  past: { color: '#4A5262' },
+  dow: { color: colors.muted, fontSize: 12, fontWeight: '600', textAlign: 'center', textAlignVertical: 'center', aspectRatio: 2 },
+  day: { width: '82%', aspectRatio: 1, borderRadius: 4, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  dayOn: { backgroundColor: colors.butter, borderColor: colors.ink },
+  dayText: { fontSize: 15 },
+  dayTextOn: { fontWeight: '800' },
+  past: { color: '#8FA3BF' },
 });

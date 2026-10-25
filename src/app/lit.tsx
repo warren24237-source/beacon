@@ -1,11 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { activityTitle, fetchFriendsBeacons, fmtRange, fmtTime, loadHidden } from '@/lib/beacon';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
-import { colors, ScrollScreen } from '@/lib/ui';
+import { border, colors, ScrollScreen, shadow, Text } from '@/lib/ui';
 
 // Every friend with a lit beacon, hidden ones included. Tap one to open it.
 export default function LitNow() {
@@ -68,7 +68,7 @@ export default function LitNow() {
           <Text style={styles.muted}>
             {n === 1 ? '1 friend is free.' : `${n} friends are free.`} Soonest ending first.
           </Text>
-          <View>
+          <View style={styles.list}>
             {beacons.map((b, i) => {
               const isHidden = hidden.includes(b.id);
               const name = b.owner?.full_name ?? 'A friend';
@@ -108,7 +108,7 @@ function Wordmark() {
   return (
     <View style={styles.wordmark}>
       <View style={styles.dot} />
-      <Text style={styles.wordmarkText}>Beacon</Text>
+      <Text style={styles.wordmarkText}>beacon</Text>
     </View>
   );
 }
@@ -116,41 +116,22 @@ function Wordmark() {
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   wordmark: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  wordmarkText: { color: colors.text, fontSize: 17, fontWeight: '800' },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#222833' },
-  link: { color: colors.muted, fontSize: 15 },
-  h1: { color: colors.text, fontSize: 28, fontWeight: '800' },
+  wordmarkText: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
+  dot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.card, borderWidth: 2, borderColor: colors.ink },
+  link: { color: colors.muted, fontSize: 15, fontWeight: '600' },
+  h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
   muted: { color: colors.muted, fontSize: 14 },
   mutedSmall: { color: colors.muted, fontSize: 12 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
-  rowLine: { borderTopWidth: 1, borderTopColor: '#2C3340' },
-  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#222833', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: colors.text, fontWeight: '700' },
-  litDot: {
-    position: 'absolute',
-    right: -1,
-    bottom: -1,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.accent,
-    borderWidth: 2,
-    borderColor: colors.bg,
-  },
-  faded: { opacity: 0.5 },
+  list: { backgroundColor: colors.card, ...border, ...shadow.card },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 12 },
+  rowLine: { borderTopWidth: 2, borderTopColor: colors.ink },
+  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.bg, borderWidth: 2, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontWeight: '800' },
+  litDot: { position: 'absolute', right: -3, bottom: -3, width: 14, height: 14, borderRadius: 7, backgroundColor: colors.accent, borderWidth: 2, borderColor: colors.ink },
+  faded: { opacity: 0.45 },
   grow: { flex: 1, gap: 2 },
-  name: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  small: { color: colors.text, fontSize: 13 },
-  tag: {
-    alignSelf: 'flex-start',
-    color: colors.muted,
-    fontSize: 12,
-    borderWidth: 1,
-    borderColor: '#2C3340',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 1,
-    marginTop: 3,
-  },
-  ends: { color: colors.muted, fontSize: 13 },
+  name: { fontSize: 17, fontWeight: '800' },
+  small: { fontSize: 13 },
+  tag: { alignSelf: 'flex-start', color: colors.muted, fontSize: 12, fontWeight: '600', marginTop: 2 },
+  ends: { fontSize: 13, fontWeight: '600' },
 });
