@@ -23,6 +23,7 @@ import {
   type Circle,
   type Friend,
 } from '@/lib/beacon';
+import { BeaconGlow } from '@/lib/glow';
 import { enableMatchAlerts } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
 import { Body, Button, Card, Chip, Chips, colors, ErrorText, Label } from '@/lib/ui';
@@ -31,7 +32,7 @@ type MyBeacon = Awaited<ReturnType<typeof fetchMyBeacon>>;
 type FriendBeacon = Awaited<ReturnType<typeof fetchFriendsBeacons>>[number];
 
 export default function Home() {
-  const { profile, session } = useAuth();
+  const { session } = useAuth();
   const userId = session?.user.id ?? '';
 
   const [mine, setMine] = useState<MyBeacon>(null);
@@ -100,7 +101,6 @@ export default function Home() {
             key={b.id}
             beacon={b}
             meIn={b.responses.some((r) => r.user_id === userId)}
-            myName={profile?.full_name ?? ''}
             onDone={load}
             onHide={() => setHidden((h) => [...h, b.id])}
           />
@@ -286,15 +286,13 @@ function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>;
   const [busy, setBusy] = useState(false);
   const start = new Date(beacon.start_time);
   const end = new Date(beacon.end_time);
-  const responders = beacon.responses.map((r) => r.profiles?.full_name).filter(Boolean) as string[];
+  const responders = beacon.responses.map((r) => r.profiles).filter(Boolean) as { full_name: string; phone_number: string | null }[];
+  const replyText = `Saw you're in! ${fmtRange(start, end)} works for me. Where do you fancy?`;
 
   return (
     <View style={{ gap: 18 }}>
       <Text style={styles.h1}>Your beacon is lit.</Text>
-      <View style={styles.glowWrap}>
-        <View style={styles.glowRing} />
-        <View style={styles.glowCore} />
-      </View>
+      <BeaconGlow />
       <Card>
         <Text style={styles.cardTitle}>
           {activityTitle(beacon.activities)} · {fmtRange(start, end)}
@@ -307,22 +305,18 @@ function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>;
         <Label>WHO&apos;S IN</Label>
         {responders.length ? (
           <>
-            {responders.map((n) => (
-              <View key={n} style={styles.person}>
+            {responders.map((p) => (
+              <View key={p.full_name + p.phone_number} style={styles.person}>
                 <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{n[0]}</Text>
+                  <Text style={styles.avatarText}>{p.full_name[0]}</Text>
                 </View>
-                <Text style={[styles.body, { flex: 1 }]}>{n}</Text>
-                <Text style={styles.in}>In</Text>
+                <Text style={[styles.body, { flex: 1 }]}>{p.full_name}</Text>
+                <Pressable style={styles.waPill} onPress={() => openWhatsApp(replyText, p.phone_number)} accessibilityRole="button">
+                  <Text style={styles.waPillText}>Message</Text>
+                </Pressable>
               </View>
             ))}
-            <Button
-              label="Reply on WhatsApp"
-              whatsapp
-              onPress={() =>
-                openWhatsApp(`Saw you're in! ${fmtRange(start, end)} works for me. Where do you fancy?`)
-              }
-            />
+            <Button label="Other chat or group" secondary onPress={() => openWhatsApp(replyText)} />
           </>
         ) : (
           <Body muted>Nobody yet. You&apos;ll get a notification when someone taps &quot;I&apos;m in&quot;.</Body>
@@ -350,13 +344,11 @@ function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>;
 function IncomingBeacon({
   beacon,
   meIn,
-  myName,
   onDone,
   onHide,
 }: {
   beacon: FriendBeacon;
   meIn: boolean;
-  myName: string;
   onDone: () => void;
   onHide: () => void;
 }) {
@@ -366,6 +358,9 @@ function IncomingBeacon({
   const start = new Date(beacon.start_time);
   const end = new Date(beacon.end_time);
 
+  const phone = beacon.owner?.phone_number ?? null;
+  const inText = `I'm in for ${activityPhrase(beacon.activities)}! ${fmtRange(start, end)} works. Where are we going?`;
+
   async function imIn() {
     setBusy(true);
     setError('');
@@ -373,7 +368,7 @@ function IncomingBeacon({
     setBusy(false);
     if (error) return setError(error.message);
     onDone();
-    openWhatsApp(`I'm in for ${activityPhrase(beacon.activities)}! ${fmtRange(start, end)} works. Where are we going?`);
+    openWhatsApp(inText, phone);
   }
 
   return (
@@ -387,11 +382,8 @@ function IncomingBeacon({
       {meIn ? (
         <>
           <Text style={styles.in}>You&apos;re in. {name} knows.</Text>
-          <Button
-            label={`Message ${name} on WhatsApp`}
-            whatsapp
-            onPress={() => openWhatsApp(`I'm in for ${activityPhrase(beacon.activities)}! Where are we going?`)}
-          />
+          <Button label={`Message ${name}`} whatsapp onPress={() => openWhatsApp(inText, phone)} />
+          <Button label="Other chat or group" secondary onPress={() => openWhatsApp(inText)} />
         </>
       ) : (
         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -403,7 +395,7 @@ function IncomingBeacon({
           </View>
         </View>
       )}
-      <Text style={styles.mutedSmall}>Hi {myName}. Only {name} can see who&apos;s in.</Text>
+      <Text style={styles.mutedSmall}>Only {name} sees who&apos;s in.</Text>
     </View>
   );
 }
@@ -425,9 +417,8 @@ const styles = StyleSheet.create({
   input: { backgroundColor: colors.card, color: colors.text, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13, fontSize: 16 },
   cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
   quote: { color: colors.text, fontSize: 15, fontStyle: 'italic' },
-  glowWrap: { alignSelf: 'center', width: 120, height: 120, alignItems: 'center', justifyContent: 'center' },
-  glowRing: { position: 'absolute', width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderColor: colors.accent, opacity: 0.35 },
-  glowCore: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.accent, shadowColor: colors.accent, shadowOpacity: 1, shadowRadius: 20, elevation: 12 },
+  waPill: { backgroundColor: colors.whatsapp, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
+  waPillText: { color: '#06260F', fontWeight: '700', fontSize: 14 },
   person: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#222833', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: colors.text, fontWeight: '700' },

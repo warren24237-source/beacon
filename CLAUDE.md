@@ -8,21 +8,22 @@ One tap tells the friends you choose, across separate circles, that you're free.
 Project docs (brief, decisions, roadmap, open questions) live in Warren's OneDrive Beacon folder, not this repo.
 
 ## Product rules (don't break without a logged decision)
-1. No in-app chat. All conversation hands off to WhatsApp via `https://wa.me/?text=...` (no number: the user picks the friend).
+1. No in-app chat. All conversation hands off to WhatsApp: `wa.me/<number>?text=` for the person directly, or `wa.me/?text=` for "Other chat or group".
 2. 5 seconds per session, max. Fewer screens, fewer taps.
 3. Low frequency by design. No streaks, nags or feeds.
 4. You choose who hears. A beacon reaches only the friends or circles picked each time. Circles are private to their owner.
 
 ## Decided so far
 - Expo (SDK 58, Expo Router, TypeScript) + Supabase. Android first.
-- Broadcast model (25 Oct): personal add-me links make two-way friendships; private circles; beacon audience = Everyone or chosen circles; "I'm in" notifies the owner and opens WhatsApp. The current schema (one shared group, invite code, matches table) predates this and needs migrating.
-- No sign-in screen: joining (invite code + first name) creates a Supabase anonymous account. Reinstalling means re-joining. No phone numbers stored.
+- Broadcast model (25 Oct): 6-character friend codes make two-way friendships; private circles; beacon audience = Everyone or chosen circles; "I'm in" notifies the owner and opens WhatsApp. Schema in migrations 0003 to 0005. Pushes are sent from Postgres via pg_net to Expo's push API.
+- No sign-in screen: joining (invite code `join-me` + first name + required WhatsApp number) creates a Supabase anonymous account. Reinstalling means re-joining. Numbers visible only to friends.
 - No location in v1. Push notifications on a match (needs an EAS development build, not Expo Go).
 
 ## Layout
-- `src/app/`: screens (Expo Router). `join` → `index` (home), guarded in `_layout.tsx`.
+- `src/app/`: screens (Expo Router). `join` → `phone` (only if missing) → `index` (home) and `friends`, guarded in `_layout.tsx`.
 - `src/lib/`: Supabase client, auth context, shared UI.
-- `supabase/migrations/`: SQL, run by hand in the Supabase SQL Editor, in order.
+- `supabase/migrations/`: SQL, applied in order via the Supabase Management API (Claude holds a token per session) or the SQL Editor.
+- Updates: `eas update --channel preview --environment preview --platform android`. Native changes need `eas build --profile preview`.
 
 ## Working rules
 - Warren can't install desktop software. Builds go through EAS in the cloud.

@@ -21,13 +21,17 @@ function Routes() {
 
   // No sign-in screen: joining with the invite code creates an anonymous account.
   const joined = !!session && !!profile;
+  const hasPhone = !!profile?.phone_number;
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
       <Stack.Protected guard={!joined}>
         <Stack.Screen name="join" />
       </Stack.Protected>
-      <Stack.Protected guard={joined}>
+      <Stack.Protected guard={joined && !hasPhone}>
+        <Stack.Screen name="phone" />
+      </Stack.Protected>
+      <Stack.Protected guard={joined && hasPhone}>
         <Stack.Screen name="index" />
         <Stack.Screen name="friends" />
       </Stack.Protected>

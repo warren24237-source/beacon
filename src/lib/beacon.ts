@@ -13,7 +13,7 @@ export type Beacon = {
   start_time: string;
   end_time: string;
   is_active: boolean;
-  owner?: { full_name: string } | null;
+  owner?: { full_name: string; phone_number: string | null } | null;
 };
 
 export type Circle = { id: string; name: string; member_ids: string[] };
@@ -95,8 +95,10 @@ export async function saveAudience(a: string[]) {
 
 // WhatsApp ------------------------------------------------------------------------
 
-export function openWhatsApp(text: string) {
-  return Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
+/** Opens WhatsApp with the message ready. With a number it goes straight to that chat;
+ *  without one, WhatsApp asks which chat or group to send it to. */
+export function openWhatsApp(text: string, number?: string | null) {
+  return Linking.openURL(`https://wa.me/${number ?? ''}?text=${encodeURIComponent(text)}`);
 }
 
 // Data --------------------------------------------------------------------------
@@ -117,20 +119,20 @@ export async function fetchCircles(): Promise<Circle[]> {
 export async function fetchMyBeacon(userId: string) {
   const { data } = await supabase
     .from('beacons')
-    .select('*, responses(user_id, created_at, profiles(full_name))')
+    .select('*, responses(user_id, created_at, profiles(full_name, phone_number))')
     .eq('owner_id', userId)
     .eq('is_active', true)
     .gt('end_time', new Date().toISOString())
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data as (Beacon & { responses: { user_id: string; profiles: { full_name: string } | null }[] }) | null;
+  return data as (Beacon & { responses: { user_id: string; profiles: { full_name: string; phone_number: string | null } | null }[] }) | null;
 }
 
 export async function fetchFriendsBeacons(userId: string) {
   const { data } = await supabase
     .from('beacons')
-    .select('*, owner:profiles!beacons_owner_id_fkey(full_name), responses(user_id)')
+    .select('*, owner:profiles!beacons_owner_id_fkey(full_name, phone_number), responses(user_id)')
     .neq('owner_id', userId)
     .eq('is_active', true)
     .gt('end_time', new Date().toISOString())

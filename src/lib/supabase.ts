@@ -22,4 +22,5 @@ export type Profile = {
   avatar_url: string | null;
   expo_push_token: string | null;
   friend_code: string | null;
+  phone_number: string | null;
 };
