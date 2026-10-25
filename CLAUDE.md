@@ -8,7 +8,7 @@ A quiet app that tells close friends when they're both free, then opens WhatsApp
 Project docs (brief, decisions, roadmap, open questions) live in Warren's OneDrive Beacon folder, not this repo.
 
 ## Product rules (don't break without a logged decision)
-1. No in-app chat. All conversation hands off to WhatsApp via `https://wa.me/<digits>?text=...`.
+1. No in-app chat. All conversation hands off to WhatsApp via `https://wa.me/?text=...` (no number: the user picks the friend).
 2. 5 seconds per session, max. Fewer screens, fewer taps.
 3. Low frequency by design. No streaks, nags or feeds.
 4. Quiet by default. Beacons are private; only a mutual overlap notifies anyone.
@@ -16,12 +16,12 @@ Project docs (brief, decisions, roadmap, open questions) live in Warren's OneDri
 ## Decided so far
 - Expo (SDK 58, Expo Router, TypeScript) + Supabase. Android first.
 - One shared group, gated by one invite code (`app_settings.invite_code`, checked in `join_group()`).
-- No sign-in screen: joining (invite code, name, WhatsApp number) creates a Supabase anonymous account. Reinstalling means re-joining. Number stored as digits only.
+- No sign-in screen: joining (invite code + first name) creates a Supabase anonymous account. Reinstalling means re-joining. No phone numbers stored.
 - No location in v1. Push notifications on a match (needs an EAS development build, not Expo Go).
 
 ## Layout
 - `src/app/`: screens (Expo Router). `join` → `index` (home), guarded in `_layout.tsx`.
-- `src/lib/`: Supabase client, auth context, phone formatting, shared UI.
+- `src/lib/`: Supabase client, auth context, shared UI.
 - `supabase/migrations/`: SQL, run by hand in the Supabase SQL Editor, in order.
 
 ## Working rules

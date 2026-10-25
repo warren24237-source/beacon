@@ -19,7 +19,6 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
 export type Profile = {
   id: string;
   full_name: string;
-  phone_number: string;
   avatar_url: string | null;
   expo_push_token: string | null;
 };
