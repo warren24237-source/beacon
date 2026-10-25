@@ -28,8 +28,8 @@ export async function enableMatchAlerts(userId: string): Promise<PushResult> {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('matches', {
-      name: 'Matches',
-      description: 'When a mate is free at the same time as you',
+      name: 'Beacons',
+      description: 'When a friend lights a beacon or says they are in',
       importance: AndroidImportance.HIGH,
     });
   }

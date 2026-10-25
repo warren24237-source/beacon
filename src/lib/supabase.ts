@@ -21,4 +21,5 @@ export type Profile = {
   full_name: string;
   avatar_url: string | null;
   expo_push_token: string | null;
+  friend_code: string | null;
 };

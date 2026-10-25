@@ -28,6 +28,7 @@ function Routes() {
       </Stack.Protected>
       <Stack.Protected guard={joined}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="friends" />
       </Stack.Protected>
     </Stack>
   );
