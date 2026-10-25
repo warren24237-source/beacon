@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth';
@@ -26,11 +26,25 @@ import {
 } from '@/lib/beacon';
 import { BeaconGlow } from '@/lib/glow';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
+import { PollsHome } from '@/lib/pollsHome';
 import { enableMatchAlerts } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
 import { Body, Button, Card, Chip, Chips, colors, ErrorText, Label } from '@/lib/ui';
 
 type MyBeacon = Awaited<ReturnType<typeof fetchMyBeacon>>;
+
+const handledTaps = new Set<string>();
+// Not available in browsers (only used for screenshots there).
+const useLastTap = Platform.OS === 'web' ? () => null : Notifications.useLastNotificationResponse;
+
+function openPollFrom(res: Notifications.NotificationResponse) {
+  const key = res.notification.request.identifier;
+  const data = res.notification.request.content.data as { type?: string; poll_id?: string } | undefined;
+  if (data?.type === 'poll' && data.poll_id && !handledTaps.has(key)) {
+    handledTaps.add(key);
+    router.push(`/poll/${data.poll_id}`);
+  }
+}
 
 export default function Home() {
   const { session } = useAuth();
@@ -43,6 +57,7 @@ export default function Home() {
   const [hidden, setHidden] = useState<string[]>([]);
   const [requestCount, setRequestCount] = useState(0);
   const [composing, setComposing] = useState(false);
+  const [tab, setTab] = useState<'now' | 'date'>('now');
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -73,6 +88,12 @@ export default function Home() {
     loadHidden().then(setHidden);
   }, []);
 
+  // Opened from a "Find a date" notification while the app was closed: go to it, once.
+  const lastTap = useLastTap();
+  useEffect(() => {
+    if (lastTap) openPollFrom(lastTap);
+  }, [lastTap]);
+
   // Sign this phone up for notifications straight away, so friends' beacons reach it
   // even if it has never lit one. Android only asks once.
   useEffect(() => {
@@ -82,7 +103,10 @@ export default function Home() {
   useEffect(() => {
     const a = AppState.addEventListener('change', (s) => s === 'active' && load());
     const n = Notifications.addNotificationReceivedListener(() => load());
-    const r = Notifications.addNotificationResponseReceivedListener(() => load());
+    const r = Notifications.addNotificationResponseReceivedListener((res) => {
+      openPollFrom(res);
+      load();
+    });
     return () => {
       a.remove();
       n.remove();
@@ -133,7 +157,22 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {visibleIncoming.map((b) => (
+        <View style={styles.tabs} accessibilityRole="tablist">
+          {(['now', 'date'] as const).map((t) => (
+            <Pressable
+              key={t}
+              onPress={() => setTab(t)}
+              style={[styles.tab, tab === t && styles.tabOn]}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === t }}>
+              <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{t === 'now' ? 'Free now' : 'Find a date'}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {tab === 'date' && <PollsHome userId={userId} />}
+
+        {tab === 'now' && visibleIncoming.map((b) => (
           <IncomingBeacon
             key={b.id}
             beacon={b}
@@ -149,7 +188,7 @@ export default function Home() {
           />
         ))}
 
-        {showComposer ? (
+        {tab === 'now' && (showComposer ? (
           <Composer
             userId={userId}
             friends={friends}
@@ -163,7 +202,7 @@ export default function Home() {
           />
         ) : (
           mine && <LitBeacon beacon={mine} onChange={() => setComposing(true)} onOut={load} />
-        )}
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -399,6 +438,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 10,
   },
+  tabs: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 12, padding: 4, gap: 4 },
+  tab: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
+  tabOn: { backgroundColor: '#222833' },
+  tabText: { color: colors.muted, fontSize: 14, fontWeight: '500' },
+  tabTextOn: { color: colors.text, fontWeight: '700' },
   litFlagNone: { borderColor: '#2C3340', backgroundColor: 'transparent' },
   litFlagDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent },
   litFlagText: { color: colors.text, fontSize: 13, fontWeight: '700' },
