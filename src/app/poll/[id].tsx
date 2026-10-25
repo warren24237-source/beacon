@@ -1,9 +1,10 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { openWhatsApp } from '@/lib/beacon';
+import { askCalendar, calendarAllowed, checkDates, type DayCheck } from '@/lib/busy';
 import { fetchPoll, fmtDay, tally, type Poll } from '@/lib/polls';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, colors, ErrorText, ScrollScreen } from '@/lib/ui';
@@ -18,12 +19,44 @@ export default function PollScreen() {
   const [mine, setMine] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [cal, setCal] = useState<Record<string, DayCheck> | null>(null);
+  const [calAllowed, setCalAllowed] = useState(false);
+  const [calNote, setCalNote] = useState('');
 
+  // Check the calendar against this poll's dates. When nothing is ticked yet, tick the free ones.
+  const runCalendar = useCallback(
+    async (p: Poll, tick: boolean) => {
+      const res = await checkDates(p.dates, p.start_minute, p.end_minute);
+      if (!res) return setCalNote("Couldn't read your calendar.");
+      setCal(res);
+      const free = p.dates.filter((d) => !res[d]?.busy.length);
+      if (tick) {
+        setMine(free);
+        setCalNote(
+          free.length
+            ? `Ticked ${free.length} ${free.length === 1 ? 'date' : 'dates'} your calendar says you're free. Check and send.`
+            : 'Your calendar has something on every date. Untick or tick as you like.'
+        );
+      }
+    },
+    []
+  );
+
+  const calChecked = useRef(false);
   const load = useCallback(async () => {
     const p = await fetchPoll(id);
     setPoll(p);
-    if (p) setMine(p.poll_answers.filter((a) => a.user_id === userId).map((a) => a.day));
-  }, [id, userId]);
+    if (!p) return;
+    const myAnswers = p.poll_answers.filter((a) => a.user_id === userId).map((a) => a.day);
+    const answeredBefore = !!p.poll_invitees.find((i) => i.user_id === userId)?.answered_at;
+    setMine(myAnswers);
+    const allowed = await calendarAllowed();
+    setCalAllowed(allowed);
+    if (allowed && p.owner_id !== userId && !calChecked.current) {
+      calChecked.current = true;
+      runCalendar(p, !answeredBefore);
+    }
+  }, [id, userId, runCalendar]);
 
   useFocusEffect(
     useCallback(() => {
@@ -76,6 +109,24 @@ export default function PollScreen() {
           <Text style={styles.body}>{datesLine}</Text>
           <Text style={styles.muted}>Tap every date you can do.</Text>
         </Card>
+        {!calAllowed && (
+          <Card>
+            <Text style={styles.cardTitle}>Check my calendar</Text>
+            <Text style={styles.muted}>Ticks the dates you&apos;re free. Your calendar stays on your phone, only your ticks are shared.</Text>
+            <Button
+              label="Check my calendar"
+              secondary
+              onPress={async () => {
+                const ok = await askCalendar();
+                setCalAllowed(ok);
+                if (!ok) return setCalNote('No problem. Tick the dates yourself.');
+                calChecked.current = true;
+                runCalendar(poll, !answered && mine.length === 0);
+              }}
+            />
+          </Card>
+        )}
+        {calNote ? <Text style={styles.note}>{calNote}</Text> : null}
         <View>
           {poll.dates.map((day, i) => {
             const on = mine.includes(day);
@@ -89,6 +140,8 @@ export default function PollScreen() {
                 <View style={styles.grow}>
                   <Text style={styles.day}>{fmtDay(day)}</Text>
                   <Text style={styles.muted}>{poll.time_label}</Text>
+                  {cal?.[day]?.busy.length ? <Text style={styles.busy}>Busy: {cal[day].busy.join(', ')}</Text> : null}
+                  {cal?.[day]?.allDay.length ? <Text style={styles.muted}>All day: {cal[day].allDay.join(', ')}</Text> : null}
                 </View>
                 <View style={[styles.tick, on && styles.tickOn]}>
                   <Text style={[styles.tickText, on && { color: colors.bg }]}>{on ? '✓' : ''}</Text>
@@ -175,6 +228,8 @@ const styles = StyleSheet.create({
   h1: { color: colors.text, fontSize: 26, fontWeight: '800', flex: 1 },
   link: { color: colors.muted, fontSize: 15, paddingTop: 6 },
   muted: { color: colors.muted, fontSize: 14 },
+  busy: { color: colors.error, fontSize: 13 },
+  note: { color: colors.accent, fontSize: 14 },
   body: { color: colors.text, fontSize: 16 },
   small: { color: colors.text, fontSize: 13 },
   cardTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },

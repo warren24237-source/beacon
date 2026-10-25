@@ -57,6 +57,9 @@ export default function FindDate() {
   const chosen = everyone
     ? new Set(friends.map((f) => f.id))
     : new Set([...circles.filter((c) => audience.includes(c.id)).flatMap((c) => c.member_ids), ...people]);
+  const window: [number | null, number | null] =
+    time === 'custom' ? [cFrom, cTo] : time === 'day' ? [600, 1020] : time === 'eve' ? [1080, 1260] : [null, null];
+
   const count = [...chosen].filter((id) => friends.some((f) => f.id === id)).length;
 
   // Everyone, or any mix of circles and individual friends.
@@ -91,6 +94,8 @@ export default function FindDate() {
       p_all: everyone,
       p_circle_ids: everyone ? [] : audience,
       p_user_ids: everyone ? [] : people,
+      p_start_minute: window[0],
+      p_end_minute: window[1],
     });
     setBusy(false);
     if (error) return setError(error.message);

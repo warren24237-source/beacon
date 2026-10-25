@@ -8,6 +8,8 @@ export type Poll = {
   title: string;
   dates: string[];
   time_label: string;
+  start_minute: number | null;
+  end_minute: number | null;
   created_at: string;
   owner: { full_name: string } | null;
   poll_invitees: { user_id: string; answered_at: string | null; profiles: { full_name: string } | null }[];

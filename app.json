@@ -2,7 +2,7 @@
   "expo": {
     "name": "Beacon",
     "slug": "beacon",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "beacon",
@@ -49,6 +49,12 @@
         "expo-contacts",
         {
           "contactsPermission": "Beacon checks your contacts to find friends who are on Beacon. Numbers are never stored."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Beacon checks your calendar to tick the dates you are free. Your calendar is never shared."
         }
       ]
     ],
