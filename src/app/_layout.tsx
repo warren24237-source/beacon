@@ -35,6 +35,8 @@ function Routes() {
         <Stack.Screen name="index" />
         <Stack.Screen name="friends" />
         <Stack.Screen name="lit" />
+        <Stack.Screen name="find-date" />
+        <Stack.Screen name="poll/[id]" />
       </Stack.Protected>
     </Stack>
   );
