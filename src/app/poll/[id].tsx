@@ -11,11 +11,11 @@ import { Button, Card, colors, ErrorText, ScrollScreen } from '@/lib/ui';
 
 // One "Find a date": results for the organiser, ticking dates for everyone else.
 export default function PollScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, answer } = useLocalSearchParams<{ id: string; answer?: string }>();
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
   const [poll, setPoll] = useState<Poll | null | undefined>(undefined);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(answer === '1');
   const [mine, setMine] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -52,7 +52,7 @@ export default function PollScreen() {
     setMine(myAnswers);
     const allowed = await calendarAllowed();
     setCalAllowed(allowed);
-    if (allowed && p.owner_id !== userId && !calChecked.current) {
+    if (allowed && !calChecked.current) {
       calChecked.current = true;
       runCalendar(p, !answeredBefore);
     }
@@ -95,19 +95,19 @@ export default function PollScreen() {
   }
 
   // Ticking dates (invitee, first time or changing).
-  if (!isOwner && (!answered || editing)) {
+  if (editing || (!isOwner && !answered)) {
     return (
       <ScrollScreen>
         <View style={styles.top}>
           <Text style={styles.h1}>{poll.title}</Text>
           <Pressable onPress={editing ? () => setEditing(false) : close} hitSlop={12}>
-            <Text style={styles.link}>{editing ? 'Cancel' : 'Close'}</Text>
+            <Text style={styles.link}>{isOwner && !answered ? 'Skip' : editing ? 'Cancel' : 'Close'}</Text>
           </Pressable>
         </View>
         <Card>
-          <Text style={styles.cardTitle}>From {ownerName}</Text>
+          <Text style={styles.cardTitle}>{isOwner ? 'Your dates too' : `From ${ownerName}`}</Text>
           <Text style={styles.body}>{datesLine}</Text>
-          <Text style={styles.muted}>Tap every date you can do.</Text>
+          <Text style={styles.muted}>{isOwner ? 'Tick the dates you can do. You count in the totals.' : 'Tap every date you can do.'}</Text>
         </Card>
         {!calAllowed && (
           <Card>
@@ -218,7 +218,10 @@ export default function PollScreen() {
           </View>
         ))}
       </View>
-      {isOwner && waiting.length > 0 && <Text style={styles.muted}>Not answered yet: {waiting.join(', ')}.</Text>}
+      {isOwner && waiting.length > 0 && (
+        <Text style={styles.muted}>Not answered yet: {waiting.map((w) => (w === ownerName ? 'you' : w)).join(', ')}.</Text>
+      )}
+      {isOwner && <Button label={answered ? 'Change my dates' : 'Add my dates'} secondary onPress={() => setEditing(true)} />}
     </ScrollScreen>
   );
 }

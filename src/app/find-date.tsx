@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { fetchCircles, fetchFriends, type Circle, type Friend } from '@/lib/beacon';
+import { calendarAllowed, checkDates, type DayCheck } from '@/lib/busy';
 import { Calendar } from '@/lib/calendar';
 import { DAY_SLOTS, fmtDay, fmtMinutes, parseYmd, TIME_OPTIONS, todayYmd, weeklyDates, ymd } from '@/lib/polls';
 import { enableMatchAlerts } from '@/lib/push';
@@ -39,6 +40,7 @@ export default function FindDate() {
   const [people, setPeople] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [clashes, setClashes] = useState<Record<string, DayCheck> | null>(null);
 
   useEffect(() => {
     fetchFriends().then(setFriends);
@@ -59,6 +61,22 @@ export default function FindDate() {
     : new Set([...circles.filter((c) => audience.includes(c.id)).flatMap((c) => c.member_ids), ...people]);
   const window: [number | null, number | null] =
     time === 'custom' ? [cFrom, cTo] : time === 'day' ? [600, 1020] : time === 'eve' ? [1080, 1260] : [null, null];
+
+  // Heads-up from your own calendar while you pick dates (only if you've already allowed it).
+  const windowKey = `${window[0]}-${window[1]}`;
+  const datesKey = dates.join(',');
+  useEffect(() => {
+    let live = true;
+    calendarAllowed().then(async (ok) => {
+      const res = ok ? await checkDates(dates, window[0], window[1]) : null;
+      if (live) setClashes(res);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datesKey, windowKey]);
+  const busyDates = clashes ? dates.filter((d) => clashes[d]?.busy.length) : [];
 
   const count = [...chosen].filter((id) => friends.some((f) => f.id === id)).length;
 
@@ -99,7 +117,7 @@ export default function FindDate() {
     });
     setBusy(false);
     if (error) return setError(error.message);
-    router.replace(`/poll/${(data as { poll_id: string }).poll_id}`);
+    router.replace(`/poll/${(data as { poll_id: string }).poll_id}?answer=1`);
   }
 
   return (
@@ -162,6 +180,16 @@ export default function FindDate() {
             ? `${dates.length} ${dates.length === 1 ? 'date' : 'dates'}: ${dates.slice(0, 4).map(fmtDay).join(', ')}${dates.length > 4 ? ' …' : ''}`
             : 'No dates yet.'}
         </Text>
+        {clashes && dates.length > 0 && (
+          <Text style={busyDates.length ? styles.busy : styles.free}>
+            {busyDates.length
+              ? `Your calendar: busy on ${busyDates
+                  .slice(0, 3)
+                  .map((d) => `${fmtDay(d)} (${clashes[d].busy[0]})`)
+                  .join(', ')}${busyDates.length > 3 ? ` and ${busyDates.length - 3} more` : ''}`
+              : 'Your calendar: free on all of these.'}
+          </Text>
+        )}
       </View>
 
       <View style={styles.group}>
@@ -225,4 +253,6 @@ const styles = StyleSheet.create({
   link: { color: colors.muted, fontSize: 15 },
   group: { gap: 10 },
   muted: { color: colors.muted, fontSize: 14 },
+  busy: { color: colors.error, fontSize: 14 },
+  free: { color: colors.whatsapp, fontSize: 14 },
 });
