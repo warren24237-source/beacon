@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { openWhatsApp } from '@/lib/beacon';
@@ -161,6 +161,21 @@ export default function PollScreen() {
     );
   }
 
+  function confirmDelete() {
+    Alert.alert(`Delete ${poll!.title}?`, "Everyone's answers go too. Nobody is told.", [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase.from('polls').delete().eq('id', poll!.id);
+          if (error) return setError(error.message);
+          close();
+        },
+      },
+    ]);
+  }
+
   // Results: organiser, or invitee after answering.
   const shareText = `${poll.title}: ${fmtDay(best.day)}, ${poll.time_label.toLowerCase()} works for ${best.who.length} of ${total}${best.who.length ? ` (${best.who.join(', ')})` : ''}. Shall we lock it in?`;
 
@@ -222,6 +237,12 @@ export default function PollScreen() {
         <Text style={styles.muted}>Not answered yet: {waiting.map((w) => (w === ownerName ? 'you' : w)).join(', ')}.</Text>
       )}
       {isOwner && <Button label={answered ? 'Change my dates' : 'Add my dates'} secondary onPress={() => setEditing(true)} />}
+      {isOwner && (
+        <Pressable onPress={confirmDelete} hitSlop={12} style={styles.deleteWrap} accessibilityRole="button">
+          <Text style={styles.delete}>Delete this date request</Text>
+        </Pressable>
+      )}
+      <ErrorText>{error}</ErrorText>
     </ScrollScreen>
   );
 }
@@ -232,6 +253,8 @@ const styles = StyleSheet.create({
   link: { color: colors.muted, fontSize: 15, paddingTop: 6 },
   muted: { color: colors.muted, fontSize: 14 },
   busy: { color: colors.error, fontSize: 13 },
+  deleteWrap: { alignItems: 'center', paddingVertical: 8 },
+  delete: { color: colors.error, fontSize: 15 },
   note: { color: colors.accent, fontSize: 14 },
   body: { color: colors.text, fontSize: 16 },
   small: { color: colors.text, fontSize: 13 },
