@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 
 import { AuthProvider, useAuth } from '@/lib/auth';
 import '@/lib/push';
+import { useLiveUpdates } from '@/lib/updates';
 import { colors } from '@/lib/ui';
 
 SplashScreen.preventAutoHideAsync();
@@ -35,6 +36,7 @@ function Routes() {
 }
 
 export default function RootLayout() {
+  useLiveUpdates();
   return (
     <AuthProvider>
       <StatusBar style="light" />
