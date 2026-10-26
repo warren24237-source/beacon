@@ -44,3 +44,4 @@ example
 
 # local secrets
 .env
+supabase/.temp/
