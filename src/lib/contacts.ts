@@ -1,6 +1,6 @@
 import { Contact, ContactField, requestPermissionsAsync } from 'expo-contacts';
 
-import { normaliseWhatsAppNumber } from './phone';
+import { normaliseNumber } from './phone';
 import { supabase } from './supabase';
 
 export type ContactMatch = { id: string; full_name: string; phone_number: string; status: 'friends' | 'requested' | 'incoming' | 'none' };
@@ -27,7 +27,7 @@ export async function loadPhoneContacts(): Promise<Result> {
   const all = new Set<string>();
   for (const c of details as any[]) {
     const name = String(c.fullName ?? '').trim();
-    const numbers = [...new Set(((c.phones ?? []) as any[]).map((p) => (p?.number ? normaliseWhatsAppNumber(p.number) : null)).filter(Boolean) as string[])];
+    const numbers = [...new Set(((c.phones ?? []) as any[]).map((p) => (p?.number ? normaliseNumber(p.number) : null)).filter(Boolean) as string[])];
     if (!name || !numbers.length) continue;
     numbers.forEach((n) => all.add(n));
     people.push({ name, numbers });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { useAuth } from '@/lib/auth';
-import { normaliseWhatsAppNumber } from '@/lib/phone';
+import { normaliseNumber } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import { Body, Button, ErrorText, Field, Screen, Title } from '@/lib/ui';
 
@@ -17,8 +17,8 @@ export default function Join() {
     setError('');
     if (!inviteCode.trim()) return setError('You need the invite code from the group.');
     if (!name.trim()) return setError('Add your name so friends know who you are.');
-    const number = normaliseWhatsAppNumber(phone);
-    if (!number) return setError('Add your WhatsApp number, e.g. 07700 900123.');
+    const number = normaliseNumber(phone);
+    if (!number) return setError('Add your mobile number, e.g. 07700 900123.');
 
     setBusy(true);
     const { data: current } = await supabase.auth.getSession();
@@ -45,10 +45,10 @@ export default function Join() {
   return (
     <Screen>
       <Title>beacon</Title>
-      <Body muted>Let your friends know when you are free. Your number is only shared with friends you add, so replies open straight in WhatsApp.</Body>
+      <Body muted>Let your friends know when you are free. Your number is only shared with friends you add, so they can message or call you.</Body>
       <Field value={inviteCode} onChangeText={setInviteCode} placeholder="Invite code" autoCapitalize="none" />
       <Field value={name} onChangeText={setName} placeholder="Your first name" autoComplete="given-name" />
-      <Field value={phone} onChangeText={setPhone} placeholder="WhatsApp number, e.g. 07700 900123" keyboardType="phone-pad" autoComplete="tel" />
+      <Field value={phone} onChangeText={setPhone} placeholder="Mobile number, e.g. 07700 900123" keyboardType="phone-pad" autoComplete="tel" />
       <ErrorText>{error}</ErrorText>
       <Button label="Join" onPress={join} busy={busy} />
     </Screen>

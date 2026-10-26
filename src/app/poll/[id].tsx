@@ -1,9 +1,8 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
-import { openWhatsApp } from '@/lib/beacon';
 import { askCalendar, calendarAllowed, checkDates, type DayCheck } from '@/lib/busy';
 import { fetchPoll, fmtDay, tally, type Poll } from '@/lib/polls';
 import { supabase } from '@/lib/supabase';
@@ -212,7 +211,7 @@ export default function PollScreen() {
               {best.who.length} of {total} free: {best.who.join(', ')}
             </Text>
           </View>
-          <Button label="Share in WhatsApp" whatsapp onPress={() => openWhatsApp(shareText)} />
+          <Button label="Share the best date" secondary onPress={() => Share.share({ message: shareText })} />
         </>
       )}
       {isOwner && best.who.length === 0 && <Text style={styles.body}>No answers yet. You&apos;ll get a notification as people answer.</Text>}

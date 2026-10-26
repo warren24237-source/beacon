@@ -1,14 +1,14 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
-import { fetchCircles, fetchFriends, openWhatsApp, type Circle, type Friend } from '@/lib/beacon';
+import { fetchCircles, fetchFriends, openSms, type Circle, type Friend } from '@/lib/beacon';
 import { cachedContacts, loadPhoneContacts, type PhoneContact } from '@/lib/contacts';
 import { inviteText } from '@/lib/invite';
-import { normaliseWhatsAppNumber } from '@/lib/phone';
+import { normaliseNumber } from '@/lib/phone';
 import { Sheet } from '@/lib/sheet';
 import { supabase } from '@/lib/supabase';
 import { border, Button, Chip, Chips, colors, ErrorText, Label, ScrollScreen, shadow, Text, TextInput } from '@/lib/ui';
@@ -270,7 +270,7 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
 
   function invite(p: PhoneContact) {
     setInvited((s) => ({ ...s, [p.key]: true }));
-    openWhatsApp(inviteText(myCode, first(p.name)), p.number);
+    openSms(p.number, inviteText(myCode, first(p.name)));
   }
 
   async function addCodeOrNumber() {
@@ -285,7 +285,7 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
       if (error) return setError(error.message);
       setMsg(`You and ${data} are now friends.`);
     } else {
-      const n = normaliseWhatsAppNumber(v);
+      const n = normaliseNumber(v);
       if (!n) {
         setBusy(false);
         return setError("That doesn't look like a code or a number. Codes are 6 characters, e.g. 4923EA.");
@@ -334,7 +334,7 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
                   ) : m ? (
                     <SmallButton label="Add" onPress={() => add(p)} />
                   ) : (
-                    <SmallButton label={invited[p.key] ? 'Invite again' : 'Invite'} whatsapp={!invited[p.key]} onPress={() => invite(p)} />
+                    <SmallButton label={invited[p.key] ? 'Invite again' : 'Invite'} invite={!invited[p.key]} onPress={() => invite(p)} />
                   )}
                 </View>
               );
@@ -572,14 +572,14 @@ function Avatar({ name, ghost, big }: { name: string; ghost?: boolean; big?: boo
   );
 }
 
-function SmallButton({ label, onPress, whatsapp }: { label: string; onPress: () => void; whatsapp?: boolean }) {
+function SmallButton({ label, onPress, invite }: { label: string; onPress: () => void; invite?: boolean }) {
   const ghost = label === 'Invite again';
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.small, whatsapp ? styles.smallWa : ghost ? styles.smallGhost : styles.smallAdd, pressed && styles.pushed]}>
-      {whatsapp && <FontAwesome name="whatsapp" size={15} color={colors.ink} />}
+      style={({ pressed }) => [styles.small, invite ? styles.smallInvite : ghost ? styles.smallGhost : styles.smallAdd, pressed && styles.pushed]}>
+      {invite && <MaterialCommunityIcons name="message-text-outline" size={15} color={colors.ink} />}
       <Text style={[styles.smallText, ghost && { fontWeight: '600' }]}>{label}</Text>
     </Pressable>
   );
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
   avatarText: { fontWeight: '800' },
   small: { flexDirection: 'row', alignItems: 'center', gap: 6, ...border, paddingVertical: 5, paddingHorizontal: 12, boxShadow: `2px 2px 0px ${colors.ink}` },
   smallAdd: { backgroundColor: colors.accent },
-  smallWa: { backgroundColor: colors.whatsapp },
+  smallInvite: { backgroundColor: colors.butter },
   smallGhost: { backgroundColor: colors.card, boxShadow: 'none' },
   smallText: { fontWeight: '800', fontSize: 14 },
   pushed: { boxShadow: 'none', transform: [{ translateX: 2 }, { translateY: 2 }] },

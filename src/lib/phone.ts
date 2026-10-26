@@ -1,6 +1,7 @@
-// WhatsApp links need the full international number, digits only (e.g. 447700900123).
+// Mobile numbers are stored in full international form, digits only (e.g. 447700900123),
+// so contacts can be matched and Message / Call open the right person.
 // Assumes UK numbers when someone types a leading 0.
-export function normaliseWhatsAppNumber(input: string): string | null {
+export function normaliseNumber(input: string): string | null {
   let digits = input.replace(/[^\d+]/g, '');
   if (digits.startsWith('+')) digits = digits.slice(1);
   else if (digits.startsWith('00')) digits = digits.slice(2);

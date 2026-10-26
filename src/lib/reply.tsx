@@ -1,23 +1,20 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
-import { callNumber, openSms, openWhatsApp } from './beacon';
+import { callNumber, openSms } from './beacon';
 import { colors, Text } from './ui';
 
-// The three ways to reach one person (decision 45). Each goes straight to them.
+// How to reach one person (decision 52): Message and Call, straight to them. Message opens
+// whichever messaging app their phone uses, so Beacon isn't tied to WhatsApp or anything else.
 // Full size: icons with a word underneath (decision 42). Compact (who's in on your beacon):
-// small icons on one line with the name, no words; screen readers still get "WhatsApp Kat" etc.
+// small icons on one line with the name, no words; screen readers still get "Message Kat" etc.
 export function ReplyIcons({ name, phone, text, compact }: { name: string; phone: string | null; text: string; compact?: boolean }) {
   if (!phone) return <Text style={styles.none}>No number</Text>;
   const size = compact ? 18 : 28;
   return (
     <View style={[styles.row, compact && styles.rowCompact]}>
-      <Tile label="WhatsApp" a11y={`WhatsApp ${name}`} compact={compact} bg={colors.whatsapp} onPress={() => openWhatsApp(text, phone)}>
-        <FontAwesome name="whatsapp" size={size + 2} color={colors.ink} />
-      </Tile>
-      <Tile label="Messages" a11y={`Text ${name}`} compact={compact} onPress={() => openSms(phone, text)}>
+      <Tile label="Message" a11y={`Message ${name}`} compact={compact} onPress={() => openSms(phone, text)}>
         <MaterialCommunityIcons name="message-text-outline" size={size} color={colors.ink} />
       </Tile>
       <Tile label="Call" a11y={`Call ${name}`} compact={compact} bg={colors.butter} onPress={() => callNumber(phone)}>
@@ -46,7 +43,7 @@ const shadow2: ViewStyle = { boxShadow: `2px 2px 0px ${colors.ink}` };
 const pushed: ViewStyle = { boxShadow: 'none', transform: [{ translateX: 3 }, { translateY: 3 }] };
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 4 },
+  row: { flexDirection: 'row', justifyContent: 'center', gap: 40, paddingVertical: 4 },
   rowCompact: { justifyContent: 'flex-end', gap: 8, paddingVertical: 0, flexShrink: 0 },
   tile: { flex: 1, alignItems: 'center', gap: 6 },
   tileCompact: { flexGrow: 0, flexShrink: 0 },
