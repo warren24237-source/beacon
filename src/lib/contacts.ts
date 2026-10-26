@@ -1,6 +1,6 @@
 import { Contact, ContactField, requestPermissionsAsync } from 'expo-contacts';
 
-import { normaliseNumber } from './phone';
+import { bestNumber, normaliseNumber } from './phone';
 import { supabase } from './supabase';
 
 export type ContactMatch = { id: string; full_name: string; phone_number: string; status: 'friends' | 'requested' | 'incoming' | 'none' };
@@ -23,14 +23,15 @@ export async function loadPhoneContacts(): Promise<Result> {
   if (status !== 'granted') return { ok: false, reason: 'Beacon needs access to your contacts to find friends. You can allow it in your phone settings.' };
 
   const details = await Contact.getAllDetails([ContactField.FULL_NAME, ContactField.PHONES] as const, { limit: 5000 });
-  const people: { name: string; numbers: string[] }[] = [];
+  const people: { name: string; numbers: string[]; best: string }[] = [];
   const all = new Set<string>();
   for (const c of details as any[]) {
     const name = String(c.fullName ?? '').trim();
     const numbers = [...new Set(((c.phones ?? []) as any[]).map((p) => (p?.number ? normaliseNumber(p.number) : null)).filter(Boolean) as string[])];
-    if (!name || !numbers.length) continue;
+    const best = bestNumber(c.phones ?? []);
+    if (!name || !numbers.length || !best) continue;
     numbers.forEach((n) => all.add(n));
-    people.push({ name, numbers });
+    people.push({ name, numbers, best });
   }
   if (!people.length) return { ok: true, people: [] };
 
@@ -40,7 +41,8 @@ export async function loadPhoneContacts(): Promise<Result> {
 
   const out = people.map((p, i) => {
     const hit = p.numbers.find((n) => byNumber.has(n));
-    return { key: `${i}`, name: p.name, number: hit ?? p.numbers[0], match: hit ? byNumber.get(hit)! : null };
+    // On Beacon: the number they joined with. Not on Beacon: their mobile, never a landline.
+    return { key: `${i}`, name: p.name, number: hit ?? p.best, match: hit ? byNumber.get(hit)! : null };
   });
   out.sort((a, b) => a.name.localeCompare(b.name));
   cache = out;

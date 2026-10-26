@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import * as Updates from 'expo-updates';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { AppState, KeyboardAvoidingView, Platform, type ScrollViewInstance, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -189,6 +190,8 @@ export default function Home() {
               </View>
             )}
           </View>
+          {/* Warren's own test lane: updates land here before testers get them. */}
+          {Updates.channel === 'staging' && <Text style={styles.lane}>Test lane</Text>}
           <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
             <Text style={[styles.link, requestCount > 0 && { color: colors.ink, fontWeight: '800' }]}>
               {requestCount > 0 ? `Friends · ${requestCount} new` : `Friends (${friends.length})`}
@@ -612,6 +615,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 14, fontWeight: '600' },
   tabTextOn: { color: colors.bg, fontWeight: '800' },
   link: { color: colors.muted, fontSize: 15, fontWeight: '600' },
+  lane: { fontSize: 11, fontWeight: '800', color: colors.muted, borderWidth: 1.5, borderColor: colors.muted, borderStyle: 'dashed', paddingHorizontal: 5, marginLeft: 'auto', marginRight: 10 },
   h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
   h2: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
   center: { textAlign: 'center' },
