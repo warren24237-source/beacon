@@ -52,7 +52,7 @@ export function whenLabel(start: Date, end: Date, now = new Date()): { text: str
   return { text: `${dayLabel(start, now)} · ${fmtRange(start, end)}`, live: false };
 }
 
-/** Quick windows for a day. Today: only ones that haven't finished, plus "Next 2 hours". */
+/** Quick windows for a day. Today: only ones with at least an hour left, plus "Next 2 hours". */
 export function presetWindows(offset = 0, now = new Date()): Window[] {
   const day = dayStart(offset, now);
   const list: Window[] = [];
@@ -61,8 +61,9 @@ export function presetWindows(offset = 0, now = new Date()): Window[] {
     const endOfDay = at(day, 23, 59);
     list.push({ id: 'now', label: 'Next 2 hours', start: now, end: two > endOfDay ? endOfDay : two });
   }
+  // Skip windows with under an hour left (no "Afternoon 4:55pm to 5pm").
   const add = (id: string, label: string, s: Date, e: Date) => {
-    if (e > now) list.push({ id, label, start: s < now ? now : s, end: e });
+    if (e.getTime() - now.getTime() >= 3600e3) list.push({ id, label, start: s < now ? now : s, end: e });
   };
   if (offset > 0) add('morning', 'Morning', at(day, 9), at(day, 12));
   add('lunch', 'Lunch', at(day, 12), at(day, 14));

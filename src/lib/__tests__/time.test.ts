@@ -41,7 +41,11 @@ describe('whenLabel', () => {
 describe('time windows', () => {
   it('today: next 2 hours plus only windows that have not finished', () => {
     const ids = presetWindows(0, now).map((w) => w.id);
-    expect(ids).toEqual(['now', 'afternoon', 'early', 'tonight']); // lunch (12 to 2) has gone
+    expect(ids).toEqual(['now', 'early', 'tonight']); // lunch has gone, afternoon has under an hour left
+  });
+  it('today: hides a window with under an hour left', () => {
+    const ids = presetWindows(0, on(26, 16, 55)).map((w) => w.id);
+    expect(ids).toEqual(['now', 'early', 'tonight']); // afternoon would only be 4:55pm to 5pm
   });
   it('another day: morning to tonight', () => {
     expect(presetWindows(5, now).map((w) => w.label)).toEqual(['Morning', 'Lunch', 'Afternoon', 'Early evening', 'Tonight']);
