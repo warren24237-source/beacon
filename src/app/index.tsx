@@ -173,7 +173,7 @@ export default function Home() {
         <View style={styles.top}>
           <View style={styles.wordmark}>
             <View style={[styles.dot, !mine.length && styles.dotOff]} />
-            <Text style={styles.wordmarkText}>beacon</Text>
+            <Text style={styles.wordmarkText}>Beacon</Text>
             {incoming.length > 0 ? (
               <Pressable
                 onPress={() => router.push('/lit')}
@@ -204,7 +204,7 @@ export default function Home() {
               style={[styles.tab, tab === t && styles.tabOn]}
               accessibilityRole="tab"
               accessibilityState={{ selected: tab === t }}>
-              <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{t === 'now' ? 'Free now' : 'Find a date'}</Text>
+              <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{t === 'now' ? 'Beacons' : 'Find a date'}</Text>
             </Pressable>
           ))}
         </View>

@@ -44,7 +44,7 @@ export default function Join() {
 
   return (
     <Screen>
-      <Title>beacon</Title>
+      <Title>Beacon</Title>
       <Body muted>Let your friends know when you are free. Your number is only shared with friends you add, so they can message or call you.</Body>
       <Field value={inviteCode} onChangeText={setInviteCode} placeholder="Invite code" autoCapitalize="none" />
       <Field value={name} onChangeText={setName} placeholder="Your first name" autoComplete="given-name" />

@@ -110,7 +110,7 @@ function Wordmark() {
   return (
     <View style={styles.wordmark}>
       <View style={styles.dot} />
-      <Text style={styles.wordmarkText}>beacon</Text>
+      <Text style={styles.wordmarkText}>Beacon</Text>
     </View>
   );
 }
