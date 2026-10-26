@@ -130,10 +130,10 @@ export function Field(props: TextInputProps) {
   return <TextInput {...props} />;
 }
 
-type Variant = 'primary' | 'accent' | 'secondary' | 'whatsapp';
+type Variant = 'primary' | 'accent' | 'butter' | 'secondary' | 'whatsapp';
 
 /**
- * primary: ink with a coral shadow, one per screen. accent: coral, for "I'm in".
+ * primary: ink with a coral shadow, one per screen. accent: coral, for "I'm in". butter: yellow, for "Lock it in".
  * secondary: white. whatsapp: green, only when it opens WhatsApp.
  */
 export function Button({
@@ -165,6 +165,7 @@ export function Button({
         compact && styles.buttonCompact,
         v === 'primary' && styles.buttonPrimary,
         v === 'accent' && styles.buttonAccent,
+        v === 'butter' && styles.buttonButter,
         v === 'secondary' && styles.buttonSecondary,
         v === 'whatsapp' && styles.buttonWhatsapp,
         (pressed || busy) && pushed(v === 'primary' ? 4 : 0),
@@ -198,6 +199,7 @@ const styles = StyleSheet.create({
   buttonCompact: { paddingVertical: 7, alignSelf: 'flex-start' },
   buttonPrimary: { backgroundColor: colors.ink, ...shadow.primary },
   buttonAccent: { backgroundColor: colors.accent },
+  buttonButter: { backgroundColor: colors.butter },
   buttonSecondary: { backgroundColor: colors.card },
   buttonWhatsapp: { backgroundColor: colors.whatsapp },
   buttonLabel: { fontSize: 17, fontWeight: '800' },

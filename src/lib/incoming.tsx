@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { activityPhrase, fetchFriendsBeacons, whenLabel } from './beacon';
+import { activityPhrase, fetchFriendsBeacons, fetchLockedInWith, type LockedPerson, whenLabel } from './beacon';
 import { PlaceRow, PrefPicker, usePlaceNames } from './placeui';
 import { ReplyIcons } from './reply';
 import { WhenTag } from './when';
@@ -38,6 +38,13 @@ export function IncomingBeacon({
   const myPref = beacon.place_prefs?.[0]?.position; // undefined = not chosen yet; null = any
 
   const phone = beacon.owner?.phone_number ?? null;
+  const locked = !!beacon.locked_at && meIn;
+  const [people, setPeople] = useState<LockedPerson[]>([]);
+  useEffect(() => {
+    if (locked) fetchLockedInWith(beacon.id).then(setPeople);
+  }, [locked, beacon.id]);
+  // people[0] is the owner (see locked_in_with); the rest are the others who are in.
+  const others = people.slice(1).map((p) => p.full_name);
 
   async function imIn() {
     setBusy(true);
@@ -61,7 +68,32 @@ export function IncomingBeacon({
       ))}
       {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
       <ErrorText>{error}</ErrorText>
-      {meIn ? (
+      {locked ? (
+        <>
+          <View style={styles.actions}>
+            <Text style={styles.lockedTag}>Locked in</Text>
+            {onDismiss && (
+              <Pressable onPress={onDismiss} hitSlop={12} accessibilityRole="button">
+                <Text style={styles.link}>Done</Text>
+              </Pressable>
+            )}
+          </View>
+          <Text style={styles.in}>{others.length ? `You're in with ${others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}` : others[0]}.` : `It's you and ${name}.`}</Text>
+          {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
+          <Text style={styles.small}>Who&apos;s in</Text>
+          {people.map((p) => (
+            <View key={p.id} style={styles.person}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{p.full_name[0]}</Text>
+              </View>
+              <Text style={[styles.in, { flex: 1 }]} numberOfLines={1}>
+                {p.full_name}
+              </Text>
+              {p.phone_number ? <ReplyIcons name={p.full_name} phone={p.phone_number} compact /> : null}
+            </View>
+          ))}
+        </>
+      ) : meIn ? (
         <>
           <View style={styles.actions}>
             <Text style={styles.in}>You&apos;re in. {name} knows.</Text>
@@ -87,7 +119,9 @@ export function IncomingBeacon({
           ) : null}
         </View>
       )}
-      <Text style={styles.small}>Only {name} sees who&apos;s in. Hiding is silent.</Text>
+      <Text style={styles.small}>
+        {locked ? "Only the people who are in can see this. You can message your friends here." : `Only ${name} sees who's in. Hiding is silent.`}
+      </Text>
     </View>
   );
 }
@@ -104,4 +138,8 @@ const styles = StyleSheet.create({
   tag: { color: colors.muted, fontSize: 12, fontWeight: '600' },
   in: { fontWeight: '800', fontSize: 15 },
   small: { color: colors.muted, fontSize: 12 },
+  lockedTag: { fontSize: 12, fontWeight: '800', backgroundColor: colors.ink, color: colors.butter, paddingHorizontal: 7, paddingVertical: 1, overflow: 'hidden' },
+  person: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: colors.card, ...border },
+  avatar: { width: 32, height: 32, backgroundColor: colors.card, ...border, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontWeight: '800' },
 });

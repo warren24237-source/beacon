@@ -14,6 +14,8 @@ export type Beacon = {
   start_time: string;
   end_time: string;
   is_active: boolean;
+  /** Set once the owner taps "Lock it in" (decision 61). */
+  locked_at?: string | null;
   owner?: { full_name: string; phone_number: string | null } | null;
   beacon_places?: BeaconPlace[];
   /** Preferences: on your beacons, everyone's; on friends' beacons, only yours (row rules). */
@@ -102,6 +104,14 @@ export async function fetchMyBeacons(userId: string): Promise<MyBeacon[]> {
     .gt('end_time', new Date().toISOString())
     .order('start_time', { ascending: true });
   return (data ?? []) as MyBeacon[];
+}
+
+export type LockedPerson = { id: string; full_name: string; phone_number: string | null };
+
+/** Who's in on a locked beacon you're in on, owner first. Numbers only for your friends (decision 28). */
+export async function fetchLockedInWith(beaconId: string): Promise<LockedPerson[]> {
+  const { data } = await supabase.rpc('locked_in_with', { p_beacon_id: beaconId });
+  return (data ?? []) as LockedPerson[];
 }
 
 export async function fetchFriendsBeacons(userId: string) {

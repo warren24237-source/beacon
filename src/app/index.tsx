@@ -553,6 +553,15 @@ function MyBeaconCard({
   const prefs = beacon.place_prefs ?? [];
   const nameOf = (id: string) => beacon.responses.find((r) => r.user_id === id)?.profiles?.full_name ?? '';
   const anyFine = prefs.filter((x) => x.position === null).map((x) => nameOf(x.user_id)).filter(Boolean);
+  const locked = !!beacon.locked_at;
+  const firstNames = responders.map((p) => p.full_name);
+  const onlyWho = firstNames.length <= 1 ? firstNames.join('') : `${firstNames.slice(0, -1).join(', ')} and ${firstNames[firstNames.length - 1]}`;
+  const act = async (fn: string, done?: () => void) => {
+    setBusy(true);
+    await supabase.rpc(fn, { p_beacon_id: beacon.id });
+    setBusy(false);
+    (done ?? onOut)();
+  };
 
   return (
     <View style={styles.mine}>
@@ -561,7 +570,7 @@ function MyBeaconCard({
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${activityTitle(beacon.activities)}, ${when.text}, ${responders.length} in`}
+        accessibilityLabel={`${activityTitle(beacon.activities)}, ${when.text}, ${locked ? 'locked in' : `${responders.length} in`}`}
         style={styles.mineHead}>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={styles.mineTitle} numberOfLines={1}>
@@ -571,9 +580,9 @@ function MyBeaconCard({
             <WhenTag text={when.text} live={when.live} />
           </View>
         </View>
-        <View style={[styles.status, responders.length ? styles.statusIn : styles.statusNone]}>
-          <Text style={[styles.statusText, !responders.length && { color: colors.muted, fontWeight: '600' }]}>
-            {responders.length ? `${responders.length} in` : 'Nobody yet'}
+        <View style={[styles.status, locked ? styles.statusLocked : responders.length ? styles.statusIn : styles.statusNone]}>
+          <Text style={[styles.statusText, locked && { color: colors.butter }, !locked && !responders.length && { color: colors.muted, fontWeight: '600' }]}>
+            {locked ? 'Locked in' : responders.length ? `${responders.length} in` : 'Nobody yet'}
           </Text>
         </View>
         <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
@@ -582,6 +591,7 @@ function MyBeaconCard({
       {open && (
         <View style={styles.mineBody}>
           {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
+          {locked && <Text style={styles.muted}>Locked in. Only {onlyWho} can see it, and nobody new can join.</Text>}
           {places.length > 0 && (
             <View style={{ gap: 8 }}>
               {responders.length > 0 && <Label>Who prefers where</Label>}
@@ -608,21 +618,22 @@ function MyBeaconCard({
           ) : (
             <Text style={styles.muted}>You&apos;ll get a buzz when someone taps &quot;I&apos;m in&quot;.</Text>
           )}
+          {!locked && responders.length > 0 && (
+            // Decision 61: one tap, no confirm, because Unlock undoes it.
+            <Button label="Lock it in" variant="butter" compact busy={busy} onPress={() => act('lock_beacon')} />
+          )}
           <View style={styles.mineActs}>
-            <Pressable onPress={onChange} hitSlop={8} accessibilityRole="button">
-              <Text style={styles.actLink}>Change</Text>
-            </Pressable>
-            <Pressable
-              disabled={busy}
-              hitSlop={8}
-              accessibilityRole="button"
-              onPress={async () => {
-                setBusy(true);
-                await supabase.rpc('put_out_beacon', { p_beacon_id: beacon.id });
-                setBusy(false);
-                onOut();
-              }}>
-              <Text style={styles.actLink}>{busy ? 'Putting it out…' : 'Put it out'}</Text>
+            {locked ? (
+              <Pressable disabled={busy} onPress={() => act('unlock_beacon')} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.actLink}>Unlock</Text>
+              </Pressable>
+            ) : (
+              <Pressable onPress={onChange} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.actLink}>Change</Text>
+              </Pressable>
+            )}
+            <Pressable disabled={busy} hitSlop={8} accessibilityRole="button" onPress={() => act('put_out_beacon')}>
+              <Text style={styles.actLink}>{busy ? 'One moment…' : locked ? 'Call it off' : 'Put it out'}</Text>
             </Pressable>
           </View>
         </View>
@@ -662,6 +673,7 @@ const styles = StyleSheet.create({
   mineBody: { gap: 10, paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12, borderTopWidth: 1.5, borderTopColor: colors.ink },
   status: { borderWidth: 2, borderColor: colors.ink, paddingHorizontal: 8, paddingVertical: 2 },
   statusIn: { backgroundColor: colors.butter, ...shadow.select },
+  statusLocked: { backgroundColor: colors.ink, ...shadow.select },
   statusNone: { borderColor: colors.muted, borderStyle: 'dashed' },
   statusText: { fontSize: 14, fontWeight: '800' },
   chevron: { fontSize: 16, color: colors.muted, width: 14, textAlign: 'center' },

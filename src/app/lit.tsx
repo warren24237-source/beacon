@@ -73,7 +73,7 @@ export default function LitNow() {
             {beacons.map((b, i) => {
               const meIn = b.responses.some((r) => r.user_id === userId);
               const isHidden = !meIn && hidden.includes(b.id);
-              const tag = meIn ? "You're in" : isHidden ? 'Hidden' : 'Waiting on you';
+              const tag = meIn ? (b.locked_at ? 'Locked in' : "You're in") : isHidden ? 'Hidden' : 'Waiting on you';
               const name = b.owner?.full_name ?? 'A friend';
               return (
                 <Pressable
@@ -92,7 +92,7 @@ export default function LitNow() {
                       {activityTitle(b.activities)} · {whenLabel(new Date(b.start_time), new Date(b.end_time)).text}
                     </Text>
                   </View>
-                  <Text style={[styles.tag, meIn ? styles.tagIn : isHidden ? styles.tagHidden : styles.tagNew]}>{tag}</Text>
+                  <Text style={[styles.tag, meIn && b.locked_at ? styles.tagLocked : meIn ? styles.tagIn : isHidden ? styles.tagHidden : styles.tagNew]}>{tag}</Text>
                 </Pressable>
               );
             })}
@@ -137,5 +137,6 @@ const styles = StyleSheet.create({
   tag: { fontSize: 12, fontWeight: '800', borderWidth: 1.5, borderColor: colors.ink, paddingHorizontal: 7, paddingVertical: 1, overflow: 'hidden' },
   tagNew: { backgroundColor: colors.accent },
   tagIn: { backgroundColor: colors.butter },
+  tagLocked: { backgroundColor: colors.ink, color: colors.butter },
   tagHidden: { backgroundColor: colors.card, borderStyle: 'dashed', color: colors.muted, fontWeight: '600' },
 });
