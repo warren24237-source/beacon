@@ -118,6 +118,17 @@ export function openWhatsApp(text: string, number?: string | null) {
   return Linking.openURL(`https://wa.me/${number ?? ''}?text=${encodeURIComponent(text)}`);
 }
 
+/** Opens the phone's messages app on a thread with this person, message ready. */
+export function openSms(number: string, text?: string) {
+  const body = text ? `?body=${encodeURIComponent(text)}` : '';
+  return Linking.openURL(`sms:+${number}${body}`);
+}
+
+/** Opens the phone's dialler with this person's number. */
+export function callNumber(number: string) {
+  return Linking.openURL(`tel:+${number}`);
+}
+
 // Data --------------------------------------------------------------------------
 
 export async function fetchFriends(): Promise<Friend[]> {

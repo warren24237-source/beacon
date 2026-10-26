@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { activityPhrase, activityTitle, fetchFriendsBeacons, fmtRange, fmtTime, openWhatsApp } from './beacon';
+import { activityPhrase, activityTitle, fetchFriendsBeacons, fmtRange, fmtTime } from './beacon';
+import { ReplyIcons } from './reply';
 import { supabase } from './supabase';
 import { border, Button, colors, ErrorText, shadow, Text } from './ui';
 
@@ -13,12 +14,15 @@ export function IncomingBeacon({
   meIn,
   onDone,
   onHide,
+  onDismiss,
   hidden,
 }: {
   beacon: FriendBeacon;
   meIn: boolean;
   onDone: () => void;
   onHide?: () => void;
+  /** Home only: clears an answered beacon off home (it stays in Lit now). */
+  onDismiss?: () => void;
   hidden?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
@@ -37,7 +41,6 @@ export function IncomingBeacon({
     setBusy(false);
     if (error) return setError(error.message);
     onDone();
-    openWhatsApp(inText, phone);
   }
 
   return (
@@ -53,9 +56,16 @@ export function IncomingBeacon({
       <ErrorText>{error}</ErrorText>
       {meIn ? (
         <>
-          <Text style={styles.in}>You&apos;re in. {name} knows.</Text>
-          <Button label={`Message ${name}`} whatsapp onPress={() => openWhatsApp(inText, phone)} />
-          <Button label="Other chat or group" secondary onPress={() => openWhatsApp(inText)} />
+          <View style={styles.actions}>
+            <Text style={styles.in}>You&apos;re in. {name} knows.</Text>
+            {onDismiss && (
+              <Pressable onPress={onDismiss} hitSlop={12} accessibilityRole="button">
+                <Text style={styles.link}>Done</Text>
+              </Pressable>
+            )}
+          </View>
+          <Text style={styles.small}>Message {name}</Text>
+          <ReplyIcons name={name} phone={phone} text={inText} />
         </>
       ) : (
         <View style={styles.actions}>

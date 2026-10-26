@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
-import { activityTitle, fetchFriendsBeacons, fmtRange, fmtTime, loadHidden } from '@/lib/beacon';
+import { activityTitle, fetchFriendsBeacons, fmtRange, loadHidden } from '@/lib/beacon';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
 import { border, colors, ScrollScreen, shadow, Text } from '@/lib/ui';
 
@@ -18,7 +18,8 @@ export default function LitNow() {
   const load = useCallback(async () => {
     if (!userId) return;
     const [b, h] = await Promise.all([fetchFriendsBeacons(userId), loadHidden()]);
-    b.sort((x, y) => new Date(x.end_time).getTime() - new Date(y.end_time).getTime());
+    const rank = (x: FriendBeacon) => (x.responses.some((r) => r.user_id === userId) ? 1 : h.includes(x.id) ? 2 : 0);
+    b.sort((x, y) => rank(x) - rank(y) || new Date(x.end_time).getTime() - new Date(y.end_time).getTime());
     setBeacons(b);
     setHidden(h);
   }, [userId]);
@@ -66,11 +67,13 @@ export default function LitNow() {
       ) : (
         <>
           <Text style={styles.muted}>
-            {n === 1 ? '1 friend is free.' : `${n} friends are free.`} Soonest ending first.
+            {n === 1 ? '1 friend is free.' : `${n} friends are free.`} Only you see these tags.
           </Text>
           <View style={styles.list}>
             {beacons.map((b, i) => {
-              const isHidden = hidden.includes(b.id);
+              const meIn = b.responses.some((r) => r.user_id === userId);
+              const isHidden = !meIn && hidden.includes(b.id);
+              const tag = meIn ? "You're in" : isHidden ? 'Hidden' : 'Waiting on you';
               const name = b.owner?.full_name ?? 'A friend';
               return (
                 <Pressable
@@ -88,15 +91,14 @@ export default function LitNow() {
                     <Text style={styles.small}>
                       {activityTitle(b.activities)} · {fmtRange(new Date(b.start_time), new Date(b.end_time))}
                     </Text>
-                    {isHidden && <Text style={styles.tag}>Hidden</Text>}
                   </View>
-                  <Text style={styles.ends}>Ends {fmtTime(new Date(b.end_time))} ›</Text>
+                  <Text style={[styles.tag, meIn ? styles.tagIn : isHidden ? styles.tagHidden : styles.tagNew]}>{tag}</Text>
                 </Pressable>
               );
             })}
           </View>
           <Text style={styles.mutedSmall}>
-            Hidden beacons stay off your home screen but still show here. Beacons go out on their own at their end time.
+            Once you answer or hide a beacon it leaves home but stays here. Beacons go out on their own at their end time.
           </Text>
         </>
       )}
@@ -132,6 +134,8 @@ const styles = StyleSheet.create({
   grow: { flex: 1, gap: 2 },
   name: { fontSize: 17, fontWeight: '800' },
   small: { fontSize: 13 },
-  tag: { alignSelf: 'flex-start', color: colors.muted, fontSize: 12, fontWeight: '600', marginTop: 2 },
-  ends: { fontSize: 13, fontWeight: '600' },
+  tag: { fontSize: 12, fontWeight: '800', borderWidth: 1.5, borderColor: colors.ink, paddingHorizontal: 7, paddingVertical: 1, overflow: 'hidden' },
+  tagNew: { backgroundColor: colors.accent },
+  tagIn: { backgroundColor: colors.butter },
+  tagHidden: { backgroundColor: colors.card, borderStyle: 'dashed', color: colors.muted, fontWeight: '600' },
 });

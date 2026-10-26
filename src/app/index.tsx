@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, KeyboardAvoidingView, Platform, type ScrollViewInstance, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, KeyboardAvoidingView, Modal, Platform, type ScrollViewInstance, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth';
@@ -17,19 +17,19 @@ import {
   halfHourSlots,
   loadAudience,
   loadHidden,
-  openWhatsApp,
   presetWindows,
   saveAudience,
   saveHidden,
   type Circle,
   type Friend,
 } from '@/lib/beacon';
-import { BeaconGlow } from '@/lib/glow';
+import { BeaconGlow, UnlitLamp } from '@/lib/glow';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
 import { PollsHome } from '@/lib/pollsHome';
 import { enableMatchAlerts } from '@/lib/push';
+import { ReplyIcons } from '@/lib/reply';
 import { supabase } from '@/lib/supabase';
-import { Body, border, Button, Card, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
+import { Body, border, Button, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
 
 type MyBeacon = Awaited<ReturnType<typeof fetchMyBeacon>>;
 
@@ -57,6 +57,9 @@ export default function Home() {
   const [hidden, setHidden] = useState<string[]>([]);
   const [requestCount, setRequestCount] = useState(0);
   const [composing, setComposing] = useState(false);
+  const [justLit, setJustLit] = useState(false);
+  // Beacons answered while on home stay a moment so you can message them, then leave home (decision 44).
+  const [answeredNow, setAnsweredNow] = useState<string[]>([]);
   const [tab, setTab] = useState<'now' | 'date'>('now');
   const scrollRef = useRef<ScrollViewInstance>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,7 +84,10 @@ export default function Home() {
     useCallback(() => {
       load();
       const t = setInterval(load, 15000);
-      return () => clearInterval(t);
+      return () => {
+        clearInterval(t);
+        setAnsweredNow([]);
+      };
     }, [load])
   );
 
@@ -102,7 +108,10 @@ export default function Home() {
   }, [userId]);
 
   useEffect(() => {
-    const a = AppState.addEventListener('change', (s) => s === 'active' && load());
+    const a = AppState.addEventListener('change', (s) => {
+      if (s === 'active') load();
+      else setAnsweredNow([]);
+    });
     const n = Notifications.addNotificationReceivedListener(() => load());
     const r = Notifications.addNotificationResponseReceivedListener((res) => {
       openPollFrom(res);
@@ -121,8 +130,9 @@ export default function Home() {
     setRefreshing(false);
   };
 
-  const visibleIncoming = incoming.filter((b) => !hidden.includes(b.id));
-  const showComposer = !mine || composing;
+  const isIn = (b: FriendBeacon) => b.responses.some((r) => r.user_id === userId);
+  // Home only shows beacons still waiting on you. Answered and hidden ones live in Lit now.
+  const waiting = incoming.filter((b) => !hidden.includes(b.id) && (!isIn(b) || answeredNow.includes(b.id)));
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -173,40 +183,68 @@ export default function Home() {
 
         {tab === 'date' && <PollsHome userId={userId} />}
 
-        {tab === 'now' && visibleIncoming.map((b) => (
-          <IncomingBeacon
-            key={b.id}
-            beacon={b}
-            meIn={b.responses.some((r) => r.user_id === userId)}
-            onDone={load}
-            onHide={() =>
-              setHidden((h) => {
-                const next = [...h, b.id];
-                saveHidden(next);
-                return next;
-              })
-            }
-          />
-        ))}
+        {tab === 'now' &&
+          (mine ? (
+            <LitBeacon beacon={mine} flash={justLit} onChange={() => setComposing(true)} onOut={load} />
+          ) : (
+            <View style={styles.hero}>
+              <UnlitLamp onPress={() => setComposing(true)} />
+              <Text style={[styles.h1, styles.center]}>Free for something?</Text>
+              <Text style={[styles.muted, styles.center, { marginTop: -10 }]}>Tap the beacon to light it.</Text>
+            </View>
+          ))}
 
-        {tab === 'now' && (showComposer ? (
-          <Composer
-            userId={userId}
-            friends={friends}
-            circles={circles}
-            replacing={!!mine}
-            onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
-            onCancel={mine ? () => setComposing(false) : undefined}
-            onLit={async () => {
-              setComposing(false);
-              await load();
-            }}
-          />
-        ) : (
-          mine && <LitBeacon beacon={mine} onChange={() => setComposing(true)} onOut={load} />
-        ))}
+        {tab === 'now' && waiting.length > 0 && (
+          <View style={styles.group}>
+            <Label>Waiting on you</Label>
+            {waiting.map((b) => (
+              <IncomingBeacon
+                key={b.id}
+                beacon={b}
+                meIn={isIn(b)}
+                onDone={() => {
+                  setAnsweredNow((a) => [...a, b.id]);
+                  load();
+                }}
+                onDismiss={() => setAnsweredNow((a) => a.filter((x) => x !== b.id))}
+                onHide={() =>
+                  setHidden((h) => {
+                    const next = [...h, b.id];
+                    saveHidden(next);
+                    return next;
+                  })
+                }
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Lighting a beacon: a sheet that slides up from the lamp (decision 43). */}
+      <Modal visible={composing} transparent animationType="slide" onRequestClose={() => setComposing(false)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrap}>
+          <Pressable style={{ flex: 1 }} onPress={() => setComposing(false)} accessibilityLabel="Close" />
+          <View style={styles.sheet}>
+            <View style={styles.grab} />
+            <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+              <Composer
+                userId={userId}
+                friends={friends}
+                circles={circles}
+                replacing={!!mine}
+                onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
+                onCancel={() => setComposing(false)}
+                onLit={async () => {
+                  setComposing(false);
+                  setJustLit(true);
+                  await load();
+                }}
+              />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -297,7 +335,7 @@ function Composer({
 
   return (
     <View style={{ gap: 18 }}>
-      <Text style={styles.h1}>{replacing ? 'Change your beacon' : 'Free for something?'}</Text>
+      {replacing && <Text style={styles.h2}>Change your beacon</Text>}
 
       <View style={styles.group}>
         <Label>What are you up for</Label>
@@ -370,7 +408,7 @@ function SlotRow({ slots, value, onChange }: { slots: Date[]; value: Date | null
 
 // My lit beacon ----------------------------------------------------------------
 
-function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>; onChange: () => void; onOut: () => void }) {
+function LitBeacon({ beacon, flash, onChange, onOut }: { beacon: NonNullable<MyBeacon>; flash?: boolean; onChange: () => void; onOut: () => void }) {
   const [busy, setBusy] = useState(false);
   const start = new Date(beacon.start_time);
   const end = new Date(beacon.end_time);
@@ -379,48 +417,52 @@ function LitBeacon({ beacon, onChange, onOut }: { beacon: NonNullable<MyBeacon>;
 
   return (
     <View style={{ gap: 18 }}>
-      <Text style={styles.h1}>Your beacon is lit.</Text>
-      <BeaconGlow />
-      <Card>
-        <Text style={styles.cardTitle}>
+      <View style={styles.hero}>
+        <BeaconGlow flash={flash} />
+        <Text style={[styles.h1, styles.center]}>You&apos;re lit</Text>
+        <Text style={[styles.muted, styles.center, { marginTop: -10 }]}>
           {activityTitle(beacon.activities)} · {fmtRange(start, end)}
         </Text>
-        {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
-        <Text style={styles.muted}>Goes out on its own at {fmtTime(end)}.</Text>
-      </Card>
+        {beacon.note ? <Text style={[styles.quote, styles.center]}>“{beacon.note}”</Text> : null}
+      </View>
 
       <View style={styles.group}>
-        <Label>Who&apos;s in</Label>
+        <Label>{responders.length ? `${responders.length} in` : "Who's in"}</Label>
         {responders.length ? (
-          <>
-            {responders.map((p) => (
-              <View key={p.full_name + p.phone_number} style={styles.person}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{p.full_name[0]}</Text>
-                </View>
-                <Text style={[styles.body, { flex: 1 }]}>{p.full_name}</Text>
-                <Button label="Message" whatsapp compact onPress={() => openWhatsApp(replyText, p.phone_number)} />
+          responders.map((p) => (
+            <View key={p.full_name + p.phone_number} style={styles.person}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{p.full_name[0]}</Text>
               </View>
-            ))}
-            <Button label="Other chat or group" secondary onPress={() => openWhatsApp(replyText)} />
-          </>
+              <Text style={[styles.name, { flex: 1 }]} numberOfLines={1}>
+                {p.full_name}
+              </Text>
+              <ReplyIcons name={p.full_name} phone={p.phone_number} text={replyText} compact />
+            </View>
+          ))
         ) : (
-          <Body muted>Nobody yet. You&apos;ll get a notification when someone taps &quot;I&apos;m in&quot;.</Body>
+          <Body muted>Nobody yet. You&apos;ll get a buzz when someone taps &quot;I&apos;m in&quot;. Goes out on its own at {fmtTime(end)}.</Body>
         )}
       </View>
 
-      <Button label="Change" secondary onPress={onChange} />
-      <Button
-        label="Put it out"
-        secondary
-        busy={busy}
-        onPress={async () => {
-          setBusy(true);
-          await supabase.rpc('put_out_beacon');
-          setBusy(false);
-          onOut();
-        }}
-      />
+      <View style={styles.pair}>
+        <View style={{ flex: 1 }}>
+          <Button label="Change" secondary onPress={onChange} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button
+            label="Put it out"
+            secondary
+            busy={busy}
+            onPress={async () => {
+              setBusy(true);
+              await supabase.rpc('put_out_beacon');
+              setBusy(false);
+              onOut();
+            }}
+          />
+        </View>
+      </View>
     </View>
   );
 }
@@ -443,13 +485,20 @@ const styles = StyleSheet.create({
   tabTextOn: { color: colors.bg, fontWeight: '800' },
   link: { color: colors.muted, fontSize: 15, fontWeight: '600' },
   h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
+  h2: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
+  center: { textAlign: 'center' },
+  hero: { gap: 14, paddingTop: 4 },
+  pair: { flexDirection: 'row', gap: 12 },
+  name: { fontSize: 16, fontWeight: '800' },
+  sheetWrap: { flex: 1, backgroundColor: 'rgba(22,22,22,0.45)' },
+  sheet: { backgroundColor: colors.bg, borderTopWidth: 2, borderColor: colors.ink, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingHorizontal: 22, paddingTop: 10, maxHeight: '90%' },
+  grab: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: colors.ink, opacity: 0.4, marginBottom: 14 },
   group: { gap: 10 },
   muted: { color: colors.muted, fontSize: 14 },
   body: { fontSize: 16 },
   input: {},
-  cardTitle: { fontSize: 19, fontWeight: '800' },
   quote: { fontSize: 15 },
-  person: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
+  person: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, backgroundColor: colors.card, ...border },
   avatar: { width: 36, height: 36, backgroundColor: colors.card, ...border, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontWeight: '800' },
 });
