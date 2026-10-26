@@ -538,6 +538,7 @@ function MyBeaconCard({
           {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
           {responders.length ? (
             responders.map((p) => (
+              // One line per person: small icons without labels (decision 42 exception), name shrinks if long.
               <View key={p.full_name + p.phone_number} style={styles.person}>
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>{p.full_name[0]}</Text>
@@ -617,7 +618,7 @@ const styles = StyleSheet.create({
   body: { fontSize: 16 },
   input: {},
   quote: { fontSize: 15 },
-  person: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, backgroundColor: colors.card, ...border },
-  avatar: { width: 36, height: 36, backgroundColor: colors.card, ...border, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  person: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: colors.card, ...border },
+  avatar: { width: 32, height: 32, backgroundColor: colors.card, ...border, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontWeight: '800' },
 });
