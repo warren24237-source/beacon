@@ -25,12 +25,12 @@ Project docs (brief, decisions, roadmap, open questions) and the **current statu
 - `src/app/`: screens (Expo Router). `join` → `phone` (only if missing) → `index` (home) and `friends`, guarded in `_layout.tsx`.
 - `src/lib/`: Supabase client, auth context, shared UI.
 - `supabase/migrations/`: SQL, applied in order via the Supabase Management API (Claude holds a token per session) or the SQL Editor.
-- Updates: `eas update --channel staging --environment preview --platform android` first, then republish to `preview`. Native changes need `eas build --profile staging` (Warren) and `--profile preview` (testers).
+- Updates: `eas update --channel preview --environment preview --platform android` (Warren and Kat both on preview for now). Native changes need `eas build --profile preview`.
 
 ## Working rules
 - Warren can't install desktop software. Builds go through EAS in the cloud.
 - Run `npm run check` (typecheck, lint, tests) before every commit. GitHub runs the same on every push (`.github/workflows/checks.yml`).
 - Pure logic (dates, times, wording, phone numbers) lives in import-free files (`src/lib/time.ts`, `src/lib/phone.ts`) with tests in `src/lib/__tests__/`. Add a test when fixing a bug there.
-- Lanes: `staging` (Warren's phone only, "Test lane" label) gets every update first. Promote the same update to testers with `eas update:republish --group <id> --destination-channel preview` once Warren has tried it. `production` only on Warren's say-so.
+- Lanes: one `preview` lane for Warren and Kat for now. A `staging` lane (Warren only, "Test lane" label) is set up in eas.json but parked until Beacon goes beyond the two of them; then updates go to staging first and are copied to preview with `eas update:republish --group <id> --destination-channel preview`. `production` only on Warren's say-so.
 - Never commit `.env`.
 - Never use em dashes in copy or docs. Use a full stop or a comma.
