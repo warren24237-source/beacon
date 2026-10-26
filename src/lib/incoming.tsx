@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { activityPhrase, fetchFriendsBeacons, whenLabel } from './beacon';
+import { PlaceRow, PrefPicker, usePlaceNames } from './placeui';
 import { ReplyIcons } from './reply';
 import { WhenTag } from './when';
 import { supabase } from './supabase';
@@ -32,6 +33,9 @@ export function IncomingBeacon({
   const start = new Date(beacon.start_time);
   const end = new Date(beacon.end_time);
   const when = whenLabel(start, end);
+  const places = [...(beacon.beacon_places ?? [])].sort((a, b) => a.position - b.position);
+  usePlaceNames(places);
+  const myPref = beacon.place_prefs?.[0]?.position; // undefined = not chosen yet; null = any
 
   const phone = beacon.owner?.phone_number ?? null;
 
@@ -52,6 +56,9 @@ export function IncomingBeacon({
         </Text>
         <WhenTag text={when.text} live={when.live} />
       </View>
+      {places.map((p) => (
+        <PlaceRow key={p.position} place={p} tag={p.starred ? 'Their pick' : undefined} />
+      ))}
       {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
       <ErrorText>{error}</ErrorText>
       {meIn ? (
@@ -64,6 +71,7 @@ export function IncomingBeacon({
               </Pressable>
             )}
           </View>
+          {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
           <Text style={styles.small}>Message {name}</Text>
           <ReplyIcons name={name} phone={phone} />
         </>

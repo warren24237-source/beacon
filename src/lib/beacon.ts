@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
 
+import type { BeaconPlace } from './places';
 import { supabase } from './supabase';
 
 export const ACTIVITIES = ['Coffee', 'Drinks', 'Food', 'Play date', 'Anything'] as const;
@@ -14,6 +15,9 @@ export type Beacon = {
   end_time: string;
   is_active: boolean;
   owner?: { full_name: string; phone_number: string | null } | null;
+  beacon_places?: BeaconPlace[];
+  /** Preferences: on your beacons, everyone's; on friends' beacons, only yours (row rules). */
+  place_prefs?: { user_id: string; position: number | null }[];
 };
 
 export type Circle = { id: string; name: string; member_ids: string[] };
@@ -92,7 +96,7 @@ export type MyBeacon = Beacon & { responses: { user_id: string; profiles: { full
 export async function fetchMyBeacons(userId: string): Promise<MyBeacon[]> {
   const { data } = await supabase
     .from('beacons')
-    .select('*, responses(user_id, created_at, profiles(full_name, phone_number))')
+    .select('*, responses(user_id, created_at, profiles(full_name, phone_number)), beacon_places(position, place_id, label, starred), place_prefs(user_id, position)')
     .eq('owner_id', userId)
     .eq('is_active', true)
     .gt('end_time', new Date().toISOString())
@@ -103,7 +107,7 @@ export async function fetchMyBeacons(userId: string): Promise<MyBeacon[]> {
 export async function fetchFriendsBeacons(userId: string) {
   const { data } = await supabase
     .from('beacons')
-    .select('*, owner:profiles!beacons_owner_id_fkey(full_name, phone_number), responses(user_id)')
+    .select('*, owner:profiles!beacons_owner_id_fkey(full_name, phone_number), responses(user_id), beacon_places(position, place_id, label, starred), place_prefs(user_id, position)')
     .neq('owner_id', userId)
     .eq('is_active', true)
     .gt('end_time', new Date().toISOString())

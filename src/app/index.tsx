@@ -32,6 +32,8 @@ import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
 import { PollsHome } from '@/lib/pollsHome';
 import { Sheet } from '@/lib/sheet';
 import { enableMatchAlerts } from '@/lib/push';
+import { PlaceRow, placeName, usePlaceNames, WherePicker } from '@/lib/placeui';
+import { cachedPlace, type DraftPlace } from '@/lib/places';
 import { ReplyIcons } from '@/lib/reply';
 import { WhenTag } from '@/lib/when';
 import { supabase } from '@/lib/supabase';
@@ -305,6 +307,7 @@ export default function Home() {
           circles={circles}
           replacing={replacing}
           onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
+          onScrollTo={(y) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true })}
           onLit={async () => {
             setComposing(false);
             setReplacing(null);
@@ -333,6 +336,7 @@ function Composer({
   replacing,
   onLit,
   onNoteFocus,
+  onScrollTo,
 }: {
   ref: Ref<ComposerHandle>;
   setBusy: (b: boolean) => void;
@@ -343,6 +347,7 @@ function Composer({
   replacing: MyBeacon | null;
   onLit: () => void;
   onNoteFocus?: () => void;
+  onScrollTo?: (y: number) => void;
 }) {
   const days = useMemo(() => upcomingDays(), []);
   const [day, setDay] = useState(() => {
@@ -368,6 +373,13 @@ function Composer({
   };
   const [audience, setAudience] = useState<string[]>(['everyone']);
   const [note, setNote] = useState(replacing?.note ?? '');
+  const whereY = useRef(0);
+  // Changing a beacon keeps its places (names from this session's cache).
+  const [places, setPlaces] = useState<DraftPlace[]>(() =>
+    [...(replacing?.beacon_places ?? [])]
+      .sort((a, b) => a.position - b.position)
+      .map((p) => ({ placeId: p.place_id ?? undefined, label: p.label ?? undefined, name: placeName(p), area: p.place_id ? cachedPlace(p.place_id)?.area : undefined, starred: p.starred }))
+  );
 
   useEffect(() => {
     loadAudience().then((a) => {
@@ -417,6 +429,8 @@ function Composer({
       p_all: all,
       p_circle_ids: all ? [] : audience,
       p_replace: replacing?.id ?? null,
+      p_places: places.map((p) => (p.placeId ? { place_id: p.placeId, starred: p.starred } : { label: p.label, starred: p.starred })),
+      p_place_names: places.map((p) => p.name),
     });
     setBusy(false);
     if (error) return setError(error.message);
@@ -468,6 +482,11 @@ function Composer({
             <SlotRow slots={slots} value={customEnd} onChange={setCustomEnd} />
           </View>
         )}
+      </View>
+
+      <View style={styles.group} onLayout={(e) => (whereY.current = e.nativeEvent.layout.y)}>
+        <Label>{places.length ? `Where · optional · ${places.length} of 3` : 'Where · optional'}</Label>
+        <WherePicker userId={userId} value={places} onChange={setPlaces} onFocus={() => setTimeout(() => onScrollTo?.(whereY.current), 250)} />
       </View>
 
       <View style={styles.group}>
@@ -529,6 +548,11 @@ function MyBeaconCard({
   const end = new Date(beacon.end_time);
   const when = whenLabel(start, end);
   const responders = beacon.responses.map((r) => r.profiles).filter(Boolean) as { full_name: string; phone_number: string | null }[];
+  const places = [...(beacon.beacon_places ?? [])].sort((a, b) => a.position - b.position);
+  usePlaceNames(places);
+  const prefs = beacon.place_prefs ?? [];
+  const nameOf = (id: string) => beacon.responses.find((r) => r.user_id === id)?.profiles?.full_name ?? '';
+  const anyFine = prefs.filter((x) => x.position === null).map((x) => nameOf(x.user_id)).filter(Boolean);
 
   return (
     <View style={styles.mine}>
@@ -558,6 +582,16 @@ function MyBeaconCard({
       {open && (
         <View style={styles.mineBody}>
           {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
+          {places.length > 0 && (
+            <View style={{ gap: 8 }}>
+              {responders.length > 0 && <Label>Who prefers where</Label>}
+              {places.map((p) => {
+                const who = prefs.filter((x) => x.position === p.position).map((x) => nameOf(x.user_id)).filter(Boolean);
+                return <PlaceRow key={p.position} place={p} tag={p.starred ? 'My pick' : undefined} right={responders.length ? (who.length ? who.join(', ') : 'nobody yet') : undefined} />;
+              })}
+              {anyFine.length > 0 && <Text style={styles.muted}>Any is fine: {anyFine.join(', ')}</Text>}
+            </View>
+          )}
           {responders.length ? (
             responders.map((p) => (
               // One line per person: small icons without labels (decision 42 exception), name shrinks if long.
