@@ -10,7 +10,7 @@ export type FoundPlace = { id: string; name: string; area: string };
 export type PlaceInfo = FoundPlace & { mapsUrl: string };
 
 /** One place on a beacon: a real Google place (placeId) or text as typed (label). */
-export type BeaconPlace = { position: number; place_id: string | null; label: string | null; starred: boolean };
+export type BeaconPlace = { position: number; place_id: string | null; label: string | null; starred: boolean; /** A friend's suggestion (decision 63). */ suggested_by?: string | null };
 /** A place being added in the light sheet, before the beacon exists. */
 export type DraftPlace = { placeId?: string; label?: string; name: string; area?: string; starred: boolean };
 

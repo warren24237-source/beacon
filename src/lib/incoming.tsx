@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { activityPhrase, fetchFriendsBeacons, fetchLockedInWith, type LockedPerson, whenLabel } from './beacon';
-import { PlaceRow, PrefPicker, usePlaceNames } from './placeui';
+import { useAuth } from './auth';
+import { activityPhrase, type BeaconSummary, fetchFriendsBeacons, fetchLockedInWith, fetchSummary, type LockedPerson, namesList, whenLabel } from './beacon';
+import type { DraftPlace } from './places';
+import { PlaceRow, PrefPicker, usePlaceNames, WherePicker } from './placeui';
 import { ReplyIcons } from './reply';
 import { WhenTag } from './when';
 import { supabase } from './supabase';
@@ -38,6 +40,16 @@ export function IncomingBeacon({
   const myPref = beacon.place_prefs?.[0]?.position; // undefined = not chosen yet; null = any
 
   const phone = beacon.owner?.phone_number ?? null;
+  const { session } = useAuth();
+  const userId = session?.user.id ?? '';
+  const mine = places.find((p) => p.suggested_by === userId);
+
+  // "Sent to 6 · Charlotte and Kat are in" (decision 63): a count and first names, never who it went to.
+  const [summary, setSummary] = useState<BeaconSummary | null>(null);
+  const inCount = beacon.responses.length;
+  useEffect(() => {
+    fetchSummary(beacon.id).then(setSummary);
+  }, [beacon.id, inCount]);
   const locked = !!beacon.locked_at && meIn;
   const [people, setPeople] = useState<LockedPerson[]>([]);
   useEffect(() => {
@@ -63,8 +75,13 @@ export function IncomingBeacon({
         </Text>
         <WhenTag text={when.text} live={when.live} />
       </View>
+      {summary && (
+        <Text style={styles.small}>
+          Sent to {summary.sent} · {summary.in.length ? `${namesList(summary.in)} ${summary.in.length === 1 ? 'is' : 'are'} in` : 'nobody in yet'}
+        </Text>
+      )}
       {places.map((p) => (
-        <PlaceRow key={p.position} place={p} tag={p.starred ? 'Their pick' : undefined} />
+        <PlaceRow key={p.position} place={p} tag={p.suggested_by ? (p.suggested_by === userId ? 'Your idea' : 'Suggested') : p.starred ? 'Their pick' : undefined} />
       ))}
       {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
       <ErrorText>{error}</ErrorText>
@@ -80,6 +97,7 @@ export function IncomingBeacon({
           </View>
           <Text style={styles.in}>{others.length ? `You're in with ${others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}` : others[0]}.` : `It's you and ${name}.`}</Text>
           {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
+          <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />
           <Text style={styles.small}>Who&apos;s in</Text>
           {people.map((p) => (
             <View key={p.id} style={styles.person}>
@@ -104,6 +122,7 @@ export function IncomingBeacon({
             )}
           </View>
           {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
+          <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />
           <Text style={styles.small}>Message {name}</Text>
           <ReplyIcons name={name} phone={phone} />
         </>
@@ -120,8 +139,73 @@ export function IncomingBeacon({
         </View>
       )}
       <Text style={styles.small}>
-        {locked ? "Only the people who are in can see this. You can message your friends here." : `Only ${name} sees who's in. Hiding is silent.`}
+        {locked ? 'Only the people who are in can see this. You can message your friends here.' : "Everyone it went to sees who's in, by first name. Hiding is silent."}
       </Text>
+    </View>
+  );
+}
+
+// One place of your own, once you're in (decision 63). It joins the owner's places for everyone.
+function SuggestPlace({ beaconId, userId, mine, onSaved }: { beaconId: string; userId: string; mine: boolean; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<DraftPlace[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function send() {
+    const d = draft[0];
+    if (!d) return;
+    setBusy(true);
+    setError('');
+    const { error } = await supabase.rpc('suggest_place', { p_beacon_id: beaconId, p_place_id: d.placeId ?? null, p_label: d.placeId ? null : d.label ?? d.name, p_name: d.name });
+    setBusy(false);
+    if (error) return setError(error.message);
+    setOpen(false);
+    setDraft([]);
+    onSaved();
+  }
+
+  if (mine && !open) {
+    return (
+      <View style={styles.actions}>
+        <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityRole="button">
+          <Text style={styles.link}>Change my idea</Text>
+        </Pressable>
+        <Pressable
+          onPress={async () => {
+            await supabase.rpc('remove_suggestion', { p_beacon_id: beaconId });
+            onSaved();
+          }}
+          hitSlop={8}
+          accessibilityRole="button">
+          <Text style={styles.link}>Take it back</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  if (!open) {
+    return (
+      <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityRole="button">
+        <Text style={styles.link}>Suggest somewhere else</Text>
+      </Pressable>
+    );
+  }
+  return (
+    <View style={{ gap: 8 }}>
+      <WherePicker userId={userId} value={draft} onChange={setDraft} max={1} noStar addLabel="Where would you go?" />
+      <ErrorText>{error}</ErrorText>
+      <View style={styles.actions}>
+        {draft.length ? <Button label="Suggest it" variant="butter" compact busy={busy} onPress={send} /> : <View />}
+        <Pressable
+          onPress={() => {
+            setOpen(false);
+            setDraft([]);
+          }}
+          hitSlop={8}
+          accessibilityRole="button">
+          <Text style={styles.link}>Cancel</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }

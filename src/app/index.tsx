@@ -597,7 +597,7 @@ function MyBeaconCard({
               {responders.length > 0 && <Label>Who prefers where</Label>}
               {places.map((p) => {
                 const who = prefs.filter((x) => x.position === p.position).map((x) => nameOf(x.user_id)).filter(Boolean);
-                return <PlaceRow key={p.position} place={p} tag={p.starred ? 'My pick' : undefined} right={responders.length ? (who.length ? who.join(', ') : 'nobody yet') : undefined} />;
+                return <PlaceRow key={p.position} place={p} tag={p.suggested_by ? `${nameOf(p.suggested_by) || 'A friend'}'s idea` : p.starred ? 'My pick' : undefined} right={responders.length ? (who.length ? who.join(', ') : 'nobody yet') : undefined} />;
               })}
               {anyFine.length > 0 && <Text style={styles.muted}>Any is fine: {anyFine.join(', ')}</Text>}
             </View>

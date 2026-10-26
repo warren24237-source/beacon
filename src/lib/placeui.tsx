@@ -73,7 +73,24 @@ async function recentPlaceIds(userId: string): Promise<string[]> {
   return [...new Set(rows.map((r) => r.place_id as string))].slice(0, 3);
 }
 
-export function WherePicker({ userId, value, onChange, onFocus }: { userId: string; value: DraftPlace[]; onChange: (v: DraftPlace[]) => void; onFocus?: () => void }) {
+export function WherePicker({
+  userId,
+  value,
+  onChange,
+  onFocus,
+  max = 3,
+  noStar,
+  addLabel = 'Add a place',
+}: {
+  userId: string;
+  value: DraftPlace[];
+  onChange: (v: DraftPlace[]) => void;
+  onFocus?: () => void;
+  /** Owner: up to 3. A friend's suggestion: 1, without a star (decision 63). */
+  max?: number;
+  noStar?: boolean;
+  addLabel?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [found, setFound] = useState<FoundPlace[]>([]);
@@ -114,7 +131,7 @@ export function WherePicker({ userId, value, onChange, onFocus }: { userId: stri
 
   const used = new Set(value.map((v) => v.placeId).filter(Boolean));
   const add = (p: DraftPlace) => {
-    onChange([...value, p].slice(0, 3));
+    onChange([...value, p].slice(0, max));
     setQ('');
     setFound([]);
     setOpen(false);
@@ -146,19 +163,21 @@ export function WherePicker({ userId, value, onChange, onFocus }: { userId: stri
               {p.placeId ? p.area : 'Not on Maps'}
             </Text>
           </View>
-          <Pressable
-            onPress={() => onChange(value.map((v, j) => ({ ...v, starred: j === i ? !v.starred : false })))}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={p.starred ? 'Remove my pick' : 'Make this my pick'}>
-            <MaterialCommunityIcons name={p.starred ? 'star' : 'star-outline'} size={22} color={p.starred ? colors.accent : colors.muted} />
-          </Pressable>
+          {!noStar && (
+            <Pressable
+              onPress={() => onChange(value.map((v, j) => ({ ...v, starred: j === i ? !v.starred : false })))}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={p.starred ? 'Remove my pick' : 'Make this my pick'}>
+              <MaterialCommunityIcons name={p.starred ? 'star' : 'star-outline'} size={22} color={p.starred ? colors.accent : colors.muted} />
+            </Pressable>
+          )}
           <Pressable onPress={() => onChange(value.filter((_, j) => j !== i))} hitSlop={8} accessibilityRole="button" accessibilityLabel="Remove place">
             <MaterialCommunityIcons name="close" size={20} color={colors.ink} />
           </Pressable>
         </View>
       ))}
-      {value.length > 0 && (
+      {value.length > 0 && !noStar && (
         <Text style={styles.hint}>{value.some((v) => v.starred) ? `★ ${value.find((v) => v.starred)!.name} is your pick.` : 'No star: no preference, just options.'}</Text>
       )}
 
@@ -201,9 +220,9 @@ export function WherePicker({ userId, value, onChange, onFocus }: { userId: stri
       ) : value.length === 0 ? (
         <Pressable onPress={() => setOpen(true)} style={styles.add} accessibilityRole="button">
           <Pin size={22} />
-          <Text style={styles.addText}>Add a place</Text>
+          <Text style={styles.addText}>{addLabel}</Text>
         </Pressable>
-      ) : value.length < 3 ? (
+      ) : value.length < max ? (
         <Pressable onPress={() => setOpen(true)} hitSlop={8} accessibilityRole="button">
           <Text style={styles.more}>+ Add another (up to 3)</Text>
         </Pressable>

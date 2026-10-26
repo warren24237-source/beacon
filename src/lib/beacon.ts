@@ -98,7 +98,7 @@ export type MyBeacon = Beacon & { responses: { user_id: string; profiles: { full
 export async function fetchMyBeacons(userId: string): Promise<MyBeacon[]> {
   const { data } = await supabase
     .from('beacons')
-    .select('*, responses(user_id, created_at, profiles(full_name, phone_number)), beacon_places(position, place_id, label, starred), place_prefs(user_id, position)')
+    .select('*, responses(user_id, created_at, profiles(full_name, phone_number)), beacon_places(position, place_id, label, starred, suggested_by), place_prefs(user_id, position)')
     .eq('owner_id', userId)
     .eq('is_active', true)
     .gt('end_time', new Date().toISOString())
@@ -114,10 +114,23 @@ export async function fetchLockedInWith(beaconId: string): Promise<LockedPerson[
   return (data ?? []) as LockedPerson[];
 }
 
+export type BeaconSummary = { sent: number; in: string[] };
+
+/** How many a beacon went to and who's in, by first name (decision 63). Never who it went to or numbers. */
+export async function fetchSummary(beaconId: string): Promise<BeaconSummary | null> {
+  const { data } = await supabase.rpc('beacon_summary', { p_beacon_id: beaconId });
+  return (data as BeaconSummary | null) ?? null;
+}
+
+/** "Charlotte", "Charlotte and Kat", "Charlotte, Kat and Sam". */
+export function namesList(names: string[]): string {
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 export async function fetchFriendsBeacons(userId: string) {
   const { data } = await supabase
     .from('beacons')
-    .select('*, owner:profiles!beacons_owner_id_fkey(full_name, phone_number), responses(user_id), beacon_places(position, place_id, label, starred), place_prefs(user_id, position)')
+    .select('*, owner:profiles!beacons_owner_id_fkey(full_name, phone_number), responses(user_id), beacon_places(position, place_id, label, starred, suggested_by), place_prefs(user_id, position)')
     .neq('owner_id', userId)
     .eq('is_active', true)
     .gt('end_time', new Date().toISOString())
