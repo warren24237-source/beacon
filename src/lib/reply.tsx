@@ -9,12 +9,12 @@ import { colors, Text } from './ui';
 // whichever messaging app their phone uses, so Beacon isn't tied to WhatsApp or anything else.
 // Full size: icons with a word underneath (decision 42). Compact (who's in on your beacon):
 // small icons on one line with the name, no words; screen readers still get "Message Kat" etc.
-export function ReplyIcons({ name, phone, text, compact }: { name: string; phone: string | null; text: string; compact?: boolean }) {
+export function ReplyIcons({ name, phone, compact }: { name: string; phone: string | null; compact?: boolean }) {
   if (!phone) return <Text style={styles.none}>No number</Text>;
   const size = compact ? 18 : 28;
   return (
     <View style={[styles.row, compact && styles.rowCompact]}>
-      <Tile label="Message" a11y={`Message ${name}`} compact={compact} onPress={() => openSms(phone, text)}>
+      <Tile label="Message" a11y={`Message ${name}`} compact={compact} onPress={() => openSms(phone)}>
         <MaterialCommunityIcons name="message-text-outline" size={size} color={colors.ink} />
       </Tile>
       <Tile label="Call" a11y={`Call ${name}`} compact={compact} bg={colors.butter} onPress={() => callNumber(phone)}>

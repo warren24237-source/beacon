@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { activityPhrase, fetchFriendsBeacons, fmtRange, whenLabel } from './beacon';
+import { activityPhrase, fetchFriendsBeacons, whenLabel } from './beacon';
 import { ReplyIcons } from './reply';
 import { WhenTag } from './when';
 import { supabase } from './supabase';
@@ -34,7 +34,6 @@ export function IncomingBeacon({
   const when = whenLabel(start, end);
 
   const phone = beacon.owner?.phone_number ?? null;
-  const inText = `I'm in for ${activityPhrase(beacon.activities)}! ${fmtRange(start, end)} works. Where are we going?`;
 
   async function imIn() {
     setBusy(true);
@@ -66,7 +65,7 @@ export function IncomingBeacon({
             )}
           </View>
           <Text style={styles.small}>Message {name}</Text>
-          <ReplyIcons name={name} phone={phone} text={inText} />
+          <ReplyIcons name={name} phone={phone} />
         </>
       ) : (
         <View style={styles.actions}>

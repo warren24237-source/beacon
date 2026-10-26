@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
-import { fetchCircles, fetchFriends, openSms, type Circle, type Friend } from '@/lib/beacon';
+import { fetchCircles, fetchFriends, type Circle, type Friend } from '@/lib/beacon';
 import { cachedContacts, loadPhoneContacts, type PhoneContact } from '@/lib/contacts';
 import { inviteText } from '@/lib/invite';
 import { normaliseNumber } from '@/lib/phone';
@@ -270,7 +270,8 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
 
   function invite(p: PhoneContact) {
     setInvited((s) => ({ ...s, [p.key]: true }));
-    openSms(p.number, inviteText(myCode, first(p.name)));
+    // The Share menu carries the full invite (link and codes) into any app; you pick the app, then the person.
+    Share.share({ message: inviteText(myCode, first(p.name)) });
   }
 
   async function addCodeOrNumber() {

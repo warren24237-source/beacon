@@ -59,11 +59,11 @@ export async function saveHidden(ids: string[]) {
 
 // Reaching people (decision 52): Message and Call, in whatever app each phone uses --------
 
-/** Opens a message to this person, text ready. Android lets each phone pick its app (Messages, WhatsApp, Telegram...)
- *  and remember it with "Always", so Beacon never assumes one. */
-export function openSms(number: string, text?: string) {
-  const body = text ? `?body=${encodeURIComponent(text)}` : '';
-  return Linking.openURL(`sms:+${number}${body}`);
+/** Opens a message thread with this person in whichever app the phone uses (Messages, WhatsApp, Telegram...).
+ *  No ready-written text: WhatsApp reads "number?body=..." as the whole number and says the person
+ *  isn't on WhatsApp (Warren, 26 Oct). Anything with content to send (invites) uses the Share menu. */
+export function openSms(number: string) {
+  return Linking.openURL(`sms:+${number}`);
 }
 
 /** Opens the phone's dialler with this person's number. */

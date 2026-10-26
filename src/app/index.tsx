@@ -529,7 +529,6 @@ function MyBeaconCard({
   const end = new Date(beacon.end_time);
   const when = whenLabel(start, end);
   const responders = beacon.responses.map((r) => r.profiles).filter(Boolean) as { full_name: string; phone_number: string | null }[];
-  const replyText = `Saw you're in! ${fmtRange(start, end)} works for me. Where do you fancy?`;
 
   return (
     <View style={styles.mine}>
@@ -569,7 +568,7 @@ function MyBeaconCard({
                 <Text style={[styles.name, { flex: 1 }]} numberOfLines={1}>
                   {p.full_name}
                 </Text>
-                <ReplyIcons name={p.full_name} phone={p.phone_number} text={replyText} compact />
+                <ReplyIcons name={p.full_name} phone={p.phone_number} compact />
               </View>
             ))
           ) : (
