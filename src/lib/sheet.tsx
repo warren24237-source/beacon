@@ -19,8 +19,11 @@ import { colors } from './ui';
  * A bottom sheet, three quarters of the screen, you can drag down to close from the space above it, the handle, or anywhere once
  * the form is scrolled to the top. Tapping the dimmed area or the back button also closes it.
  */
-export const Sheet = forwardRef<ScrollViewInstance, { visible: boolean; onClose: () => void; footer?: ReactNode; children: ReactNode }>(function Sheet(
-  { visible, onClose, footer, children },
+export const Sheet = forwardRef<
+  ScrollViewInstance,
+  { visible: boolean; onClose: () => void; footer?: ReactNode; children: ReactNode; /** fit: as tall as its content, up to three quarters */ fit?: boolean }
+>(function Sheet(
+  { visible, onClose, footer, children, fit },
   scrollRef
 ) {
   const [y] = useState(() => new Animated.Value(0));
@@ -85,12 +88,13 @@ export const Sheet = forwardRef<ScrollViewInstance, { visible: boolean; onClose:
       <KeyboardAvoidingView behavior="padding" style={styles.wrap}>
         <View style={styles.scrim} accessible accessibilityRole="button" accessibilityLabel="Close" onAccessibilityTap={onClose} {...scrim.panHandlers} />
         {/* Three quarters of the screen, shrinking (not sliding off the top) when the keyboard is open. */}
-        <Animated.View style={[styles.sheet, { height: Dimensions.get('window').height * 0.75 + insets.bottom, transform: [{ translateY: y }] }]} {...body.panHandlers}>
+        <Animated.View style={[styles.sheet, fit ? { maxHeight: Dimensions.get('window').height * 0.75 + insets.bottom } : { height: Dimensions.get('window').height * 0.75 + insets.bottom }, { transform: [{ translateY: y }] }]} {...body.panHandlers}>
           <View style={styles.handleZone} accessibilityLabel="Drag down to close" {...grip.panHandlers}>
             <View style={styles.grab} />
           </View>
           <ScrollView
             ref={scrollRef}
+            style={{ flexShrink: 1, flexGrow: fit ? 0 : 1 }}
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
             scrollEventThrottle={16}
