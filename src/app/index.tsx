@@ -11,13 +11,16 @@ import {
   fetchCircles,
   fetchFriends,
   fetchFriendsBeacons,
-  fetchMyBeacon,
+  fetchMyBeacons,
   fmtRange,
   fmtTime,
   halfHourSlots,
   loadAudience,
   loadHidden,
   presetWindows,
+  upcomingDays,
+  whenLabel,
+  type MyBeacon,
   saveAudience,
   saveHidden,
   type Circle,
@@ -29,10 +32,10 @@ import { PollsHome } from '@/lib/pollsHome';
 import { Sheet } from '@/lib/sheet';
 import { enableMatchAlerts } from '@/lib/push';
 import { ReplyIcons } from '@/lib/reply';
+import { WhenTag } from '@/lib/when';
 import { supabase } from '@/lib/supabase';
-import { Body, border, Button, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
+import { border, Button, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
 
-type MyBeacon = Awaited<ReturnType<typeof fetchMyBeacon>>;
 
 const handledTaps = new Set<string>();
 // Not available in browsers (only used for screenshots there).
@@ -51,7 +54,9 @@ export default function Home() {
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
 
-  const [mine, setMine] = useState<MyBeacon>(null);
+  const [mine, setMine] = useState<MyBeacon[]>([]);
+  const [replacing, setReplacing] = useState<MyBeacon | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<FriendBeacon[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [circles, setCircles] = useState<Circle[]>([]);
@@ -71,7 +76,7 @@ export default function Home() {
   const load = useCallback(async () => {
     if (!userId) return;
     const [m, inc, f, c, r] = await Promise.all([
-      fetchMyBeacon(userId),
+      fetchMyBeacons(userId),
       fetchFriendsBeacons(userId),
       fetchFriends(),
       fetchCircles(),
@@ -148,7 +153,7 @@ export default function Home() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}>
         <View style={styles.top}>
           <View style={styles.wordmark}>
-            <View style={[styles.dot, !mine && styles.dotOff]} />
+            <View style={[styles.dot, !mine.length && styles.dotOff]} />
             <Text style={styles.wordmarkText}>beacon</Text>
             {incoming.length > 0 ? (
               <Pressable
@@ -187,16 +192,45 @@ export default function Home() {
 
         {tab === 'date' && <PollsHome userId={userId} />}
 
-        {tab === 'now' &&
-          (mine ? (
-            <LitBeacon beacon={mine} flash={justLit} onChange={() => setComposing(true)} onOut={load} />
-          ) : (
-            <View style={styles.hero}>
+        {tab === 'now' && (
+          <View style={styles.hero}>
+            {mine.length ? (
+              <Pressable onPress={() => setComposing(true)} accessibilityRole="button" accessibilityLabel="Light another beacon">
+                <BeaconGlow flash={justLit} />
+              </Pressable>
+            ) : (
               <UnlitLamp onPress={() => setComposing(true)} />
-              <Text style={[styles.h1, styles.center]}>Free for something?</Text>
-              <Text style={[styles.muted, styles.center, { marginTop: -10 }]}>Tap the beacon to light it.</Text>
-            </View>
-          ))}
+            )}
+            {mine.length ? (
+              <Text style={[styles.muted, styles.center]}>Tap the beacon to add another.</Text>
+            ) : (
+              <>
+                <Text style={[styles.h1, styles.center]}>Free for something?</Text>
+                <Text style={[styles.muted, styles.center, { marginTop: -10 }]}>Tap the beacon to light it.</Text>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* Your beacons, soonest first, each collapsed to one line with its status. Tap to open (decision 51). */}
+        {tab === 'now' && mine.length > 0 && (
+          <View style={styles.group}>
+            <Label>{mine.length > 1 ? `Your beacons · ${mine.length} out` : 'Your beacon'}</Label>
+            {mine.map((b) => (
+              <MyBeaconCard
+                key={b.id}
+                beacon={b}
+                open={openId === b.id}
+                onToggle={() => setOpenId(openId === b.id ? null : b.id)}
+                onChange={() => {
+                  setReplacing(b);
+                  setComposing(true);
+                }}
+                onOut={load}
+              />
+            ))}
+          </View>
+        )}
 
         {tab === 'now' && waiting.length > 0 && (
           <View style={styles.group}>
@@ -231,12 +265,13 @@ export default function Home() {
         visible={composing}
         onClose={() => {
           setComposing(false);
+          setReplacing(null);
           setLightError('');
         }}
         footer={
           <View style={{ gap: 10 }}>
             <ErrorText>{lightError}</ErrorText>
-            <Button label={mine ? 'Update my beacon' : 'Light my beacon'} onPress={() => composerRef.current?.light()} busy={lighting} />
+            <Button label={replacing ? 'Update my beacon' : 'Light my beacon'} onPress={() => composerRef.current?.light()} busy={lighting} />
           </View>
         }>
         <Composer
@@ -246,10 +281,11 @@ export default function Home() {
           userId={userId}
           friends={friends}
           circles={circles}
-          replacing={!!mine}
+          replacing={replacing}
           onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
           onLit={async () => {
             setComposing(false);
+            setReplacing(null);
             setJustLit(true);
             await load();
           }}
@@ -281,18 +317,34 @@ function Composer({
   userId: string;
   friends: Friend[];
   circles: Circle[];
-  replacing: boolean;
+  replacing: MyBeacon | null;
   onLit: () => void;
   onNoteFocus?: () => void;
 }) {
-  const presets = useMemo(() => presetWindows(), []);
-  const slots = useMemo(() => halfHourSlots(), []);
-  const [acts, setActs] = useState<string[]>(['Drinks']);
+  const days = useMemo(() => upcomingDays(), []);
+  const [day, setDay] = useState(() => {
+    if (!replacing) return 0;
+    const diff = Math.round((new Date(replacing.start_time).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
+    return Math.min(6, Math.max(0, diff));
+  });
+  const presets = useMemo(() => presetWindows(day), [day]);
+  const slots = useMemo(() => halfHourSlots(day), [day]);
+  const [acts, setActs] = useState<string[]>(replacing?.activities ?? ['Drinks']);
   const [windowId, setWindowId] = useState(presets[0]?.id ?? 'custom');
   const [customStart, setCustomStart] = useState<Date | null>(slots[0] ?? null);
   const [customEnd, setCustomEnd] = useState<Date | null>(slots[3] ?? slots[slots.length - 1] ?? null);
+
+  // Changing day: pick its first window and reset the custom times.
+  const pickDay = (d: number) => {
+    setDay(d);
+    const p = presetWindows(d);
+    const sl = halfHourSlots(d);
+    setWindowId(d === 0 ? (p[0]?.id ?? 'custom') : (p.find((w) => w.id === 'tonight')?.id ?? p[0]?.id ?? 'custom'));
+    setCustomStart(sl[0] ?? null);
+    setCustomEnd(sl[3] ?? sl[sl.length - 1] ?? null);
+  };
   const [audience, setAudience] = useState<string[]>(['everyone']);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(replacing?.note ?? '');
 
   useEffect(() => {
     loadAudience().then((a) => {
@@ -341,6 +393,7 @@ function Composer({
       p_end: chosen.end.toISOString(),
       p_all: all,
       p_circle_ids: all ? [] : audience,
+      p_replace: replacing?.id ?? null,
     });
     setBusy(false);
     if (error) return setError(error.message);
@@ -364,7 +417,20 @@ function Composer({
       </View>
 
       <View style={styles.group}>
-        <Label>When · today</Label>
+        <Label>When</Label>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4, paddingBottom: 4 }}>
+          {days.map((d) => (
+            <Pressable
+              key={d.offset}
+              onPress={() => pickDay(d.offset)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: day === d.offset }}
+              style={[styles.dayChip, day === d.offset && styles.dayChipOn]}>
+              <Text style={styles.dayChipText}>{d.label}</Text>
+              <Text style={styles.dayChipSub}>{d.sub}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
         <Chips>
           {presets.map((p) => (
             <Chip key={p.id} label={p.label} sub={fmtRange(p.start, p.end)} on={windowId === p.id} onPress={() => setWindowId(p.id)} />
@@ -422,61 +488,88 @@ function SlotRow({ slots, value, onChange }: { slots: Date[]; value: Date | null
 
 // My lit beacon ----------------------------------------------------------------
 
-function LitBeacon({ beacon, flash, onChange, onOut }: { beacon: NonNullable<MyBeacon>; flash?: boolean; onChange: () => void; onOut: () => void }) {
+function MyBeaconCard({
+  beacon,
+  open,
+  onToggle,
+  onChange,
+  onOut,
+}: {
+  beacon: MyBeacon;
+  open: boolean;
+  onToggle: () => void;
+  onChange: () => void;
+  onOut: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const start = new Date(beacon.start_time);
   const end = new Date(beacon.end_time);
+  const when = whenLabel(start, end);
   const responders = beacon.responses.map((r) => r.profiles).filter(Boolean) as { full_name: string; phone_number: string | null }[];
   const replyText = `Saw you're in! ${fmtRange(start, end)} works for me. Where do you fancy?`;
 
   return (
-    <View style={{ gap: 18 }}>
-      <View style={styles.hero}>
-        <BeaconGlow flash={flash} />
-        <Text style={[styles.h1, styles.center]}>You&apos;re lit</Text>
-        <Text style={[styles.muted, styles.center, { marginTop: -10 }]}>
-          {activityTitle(beacon.activities)} · {fmtRange(start, end)}
-        </Text>
-        {beacon.note ? <Text style={[styles.quote, styles.center]}>“{beacon.note}”</Text> : null}
-      </View>
+    <View style={styles.mine}>
+      {/* The one-line summary: what, when, how many are in. Tap to open or close. */}
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${activityTitle(beacon.activities)}, ${when.text}, ${responders.length} in`}
+        style={styles.mineHead}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={styles.mineTitle} numberOfLines={1}>
+            {activityTitle(beacon.activities)}
+          </Text>
+          <View style={{ flexDirection: 'row' }}>
+            <WhenTag text={when.text} live={when.live} />
+          </View>
+        </View>
+        <View style={[styles.status, responders.length ? styles.statusIn : styles.statusNone]}>
+          <Text style={[styles.statusText, !responders.length && { color: colors.muted, fontWeight: '600' }]}>
+            {responders.length ? `${responders.length} in` : 'Nobody yet'}
+          </Text>
+        </View>
+        <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+      </Pressable>
 
-      <View style={styles.group}>
-        <Label>{responders.length ? `${responders.length} in` : "Who's in"}</Label>
-        {responders.length ? (
-          responders.map((p) => (
-            <View key={p.full_name + p.phone_number} style={styles.person}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{p.full_name[0]}</Text>
+      {open && (
+        <View style={styles.mineBody}>
+          {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
+          {responders.length ? (
+            responders.map((p) => (
+              <View key={p.full_name + p.phone_number} style={styles.person}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{p.full_name[0]}</Text>
+                </View>
+                <Text style={[styles.name, { flex: 1 }]} numberOfLines={1}>
+                  {p.full_name}
+                </Text>
+                <ReplyIcons name={p.full_name} phone={p.phone_number} text={replyText} compact />
               </View>
-              <Text style={[styles.name, { flex: 1 }]} numberOfLines={1}>
-                {p.full_name}
-              </Text>
-              <ReplyIcons name={p.full_name} phone={p.phone_number} text={replyText} compact />
-            </View>
-          ))
-        ) : (
-          <Body muted>Nobody yet. You&apos;ll get a buzz when someone taps &quot;I&apos;m in&quot;. Goes out on its own at {fmtTime(end)}.</Body>
-        )}
-      </View>
-
-      <View style={styles.pair}>
-        <View style={{ flex: 1 }}>
-          <Button label="Change" secondary onPress={onChange} />
+            ))
+          ) : (
+            <Text style={styles.muted}>You&apos;ll get a buzz when someone taps &quot;I&apos;m in&quot;.</Text>
+          )}
+          <View style={styles.mineActs}>
+            <Pressable onPress={onChange} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.actLink}>Change</Text>
+            </Pressable>
+            <Pressable
+              disabled={busy}
+              hitSlop={8}
+              accessibilityRole="button"
+              onPress={async () => {
+                setBusy(true);
+                await supabase.rpc('put_out_beacon', { p_beacon_id: beacon.id });
+                setBusy(false);
+                onOut();
+              }}>
+              <Text style={styles.actLink}>{busy ? 'Putting it out…' : 'Put it out'}</Text>
+            </Pressable>
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Button
-            label="Put it out"
-            secondary
-            busy={busy}
-            onPress={async () => {
-              setBusy(true);
-              await supabase.rpc('put_out_beacon');
-              setBusy(false);
-              onOut();
-            }}
-          />
-        </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -501,7 +594,22 @@ const styles = StyleSheet.create({
   h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
   h2: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
   center: { textAlign: 'center' },
-  hero: { gap: 14, paddingTop: 4 },
+  hero: { gap: 14, paddingTop: 4, alignItems: 'center' },
+  dayChip: { backgroundColor: colors.card, ...border, paddingVertical: 6, paddingHorizontal: 12, alignItems: 'center' },
+  dayChipOn: { backgroundColor: colors.butter, ...shadow.select },
+  dayChipText: { fontSize: 15, fontWeight: '600' },
+  dayChipSub: { fontSize: 12, color: colors.muted },
+  mine: { backgroundColor: colors.cream, ...border, ...shadow.card },
+  mineHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
+  mineBody: { gap: 10, paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12, borderTopWidth: 1.5, borderTopColor: colors.ink },
+  status: { borderWidth: 2, borderColor: colors.ink, paddingHorizontal: 8, paddingVertical: 2 },
+  statusIn: { backgroundColor: colors.butter, ...shadow.select },
+  statusNone: { borderColor: colors.muted, borderStyle: 'dashed' },
+  statusText: { fontSize: 14, fontWeight: '800' },
+  chevron: { fontSize: 16, color: colors.muted, width: 14, textAlign: 'center' },
+  mineTitle: { fontSize: 18, fontWeight: '800', flexShrink: 1 },
+  mineActs: { flexDirection: 'row', justifyContent: 'flex-end', gap: 18 },
+  actLink: { color: colors.muted, fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
   pair: { flexDirection: 'row', gap: 12 },
   name: { fontSize: 16, fontWeight: '800' },
   group: { gap: 10 },

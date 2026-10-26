@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { activityPhrase, activityTitle, fetchFriendsBeacons, fmtRange, fmtTime } from './beacon';
+import { activityPhrase, fetchFriendsBeacons, fmtRange, whenLabel } from './beacon';
 import { ReplyIcons } from './reply';
+import { WhenTag } from './when';
 import { supabase } from './supabase';
 import { border, Button, colors, ErrorText, shadow, Text } from './ui';
 
@@ -30,6 +31,7 @@ export function IncomingBeacon({
   const name = beacon.owner?.full_name ?? 'A friend';
   const start = new Date(beacon.start_time);
   const end = new Date(beacon.end_time);
+  const when = whenLabel(start, end);
 
   const phone = beacon.owner?.phone_number ?? null;
   const inText = `I'm in for ${activityPhrase(beacon.activities)}! ${fmtRange(start, end)} works. Where are we going?`;
@@ -46,12 +48,11 @@ export function IncomingBeacon({
   return (
     <View style={styles.card}>
       <View style={styles.head}>
-        <Text style={styles.name}>{name}&apos;s free</Text>
-        <Text style={styles.till}>till {fmtTime(end)}</Text>
+        <Text style={styles.name}>
+          {name}&apos;s up for {activityPhrase(beacon.activities)}
+        </Text>
+        <WhenTag text={when.text} live={when.live} />
       </View>
-      <Text style={styles.what}>
-        {activityTitle(beacon.activities)} · {fmtRange(start, end)}
-      </Text>
       {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
       <ErrorText>{error}</ErrorText>
       {meIn ? (
@@ -86,7 +87,7 @@ export function IncomingBeacon({
 
 const styles = StyleSheet.create({
   card: { backgroundColor: colors.card, ...border, ...shadow.card, padding: 14, gap: 6 },
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
+  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   name: { fontSize: 19, fontWeight: '800', letterSpacing: -0.2, flexShrink: 1 },
   till: { color: colors.muted, fontSize: 13 },
   what: { fontSize: 15, fontWeight: '600' },

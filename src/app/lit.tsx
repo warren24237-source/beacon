@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
-import { activityTitle, fetchFriendsBeacons, fmtRange, loadHidden } from '@/lib/beacon';
+import { activityTitle, fetchFriendsBeacons, loadHidden, whenLabel } from '@/lib/beacon';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
 import { border, colors, ScrollScreen, shadow, Text } from '@/lib/ui';
 
@@ -67,7 +67,7 @@ export default function LitNow() {
       ) : (
         <>
           <Text style={styles.muted}>
-            {n === 1 ? '1 friend is free.' : `${n} friends are free.`} Only you see these tags.
+            {n === 1 ? '1 beacon lit.' : `${n} beacons lit.`} Only you see these tags.
           </Text>
           <View style={styles.list}>
             {beacons.map((b, i) => {
@@ -89,7 +89,7 @@ export default function LitNow() {
                   <View style={[styles.grow, isHidden && styles.faded]}>
                     <Text style={styles.name}>{name}</Text>
                     <Text style={styles.small}>
-                      {activityTitle(b.activities)} · {fmtRange(new Date(b.start_time), new Date(b.end_time))}
+                      {activityTitle(b.activities)} · {whenLabel(new Date(b.start_time), new Date(b.end_time)).text}
                     </Text>
                   </View>
                   <Text style={[styles.tag, meIn ? styles.tagIn : isHidden ? styles.tagHidden : styles.tagNew]}>{tag}</Text>
