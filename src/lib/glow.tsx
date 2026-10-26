@@ -65,7 +65,6 @@ export function UnlitLamp({ size = 140, onPress }: { size?: number; onPress: () 
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Light my beacon" style={[styles.wrap, { width: size, height: size }]}>
       {({ pressed }) => (
         <>
-          <View style={[styles.dashed, { width: size * 0.82, height: size * 0.82, borderRadius: size }]} />
           <View
             style={[
               styles.disc,
@@ -84,7 +83,6 @@ const styles = StyleSheet.create({
   wrap: { alignSelf: 'center', alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', borderWidth: 3, borderColor: colors.accent },
   burst: { position: 'absolute', backgroundColor: colors.accent },
-  dashed: { position: 'absolute', borderWidth: 2, borderColor: colors.muted, borderStyle: 'dashed', opacity: 0.6 },
   disc: { backgroundColor: colors.cream, borderWidth: 3, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
   core: { backgroundColor: colors.accent, borderWidth: 3, borderColor: colors.ink },
 });
