@@ -98,6 +98,7 @@ export function IncomingBeacon({
           <Text style={styles.in}>{others.length ? `You're in with ${others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}` : others[0]}.` : `It's you and ${name}.`}</Text>
           {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
           <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />
+          <CantMakeIt beaconId={beacon.id} name={name} onDone={onDone} />
           <Text style={styles.small}>Who&apos;s in</Text>
           {people.map((p) => (
             <View key={p.id} style={styles.person}>
@@ -123,6 +124,7 @@ export function IncomingBeacon({
           </View>
           {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
           <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />
+          <CantMakeIt beaconId={beacon.id} name={name} onDone={onDone} />
           <Text style={styles.small}>Message {name}</Text>
           <ReplyIcons name={name} phone={phone} />
         </>
@@ -141,6 +143,42 @@ export function IncomingBeacon({
       <Text style={styles.small}>
         {locked ? 'Only the people who are in can see this. You can message your friends here.' : "Everyone it went to sees who's in, by first name. Hiding is silent."}
       </Text>
+    </View>
+  );
+}
+
+// Take back an "I'm in" (decision 67). Asks once so it can't be tapped by accident.
+function CantMakeIt({ beaconId, name, onDone }: { beaconId: string; name: string; onDone: () => void }) {
+  const [sure, setSure] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!sure) {
+    return (
+      <Pressable onPress={() => setSure(true)} hitSlop={8} accessibilityRole="button">
+        <Text style={styles.link}>Can&apos;t make it now</Text>
+      </Pressable>
+    );
+  }
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={styles.small}>{name} gets a buzz saying you can&apos;t make it.</Text>
+      <View style={styles.actions}>
+        <Button
+          label="Yes, I can't make it"
+          secondary
+          compact
+          busy={busy}
+          onPress={async () => {
+            setBusy(true);
+            await supabase.rpc('im_out', { p_beacon_id: beaconId });
+            setBusy(false);
+            setSure(false);
+            onDone();
+          }}
+        />
+        <Pressable onPress={() => setSure(false)} hitSlop={8} accessibilityRole="button">
+          <Text style={styles.link}>Keep me in</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
