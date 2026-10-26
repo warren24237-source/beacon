@@ -8,7 +8,7 @@ One tap tells the friends you choose, across separate circles, that you're free.
 Project docs (brief, decisions, roadmap, open questions) and the **current status / next steps** live in Warren's OneDrive Beacon folder `CLAUDE.md`, not this repo. If that folder isn't connected, ask Warren to connect it.
 
 ## Product rules (don't break without a logged decision)
-1. No in-app chat. All conversation hands off to WhatsApp: `wa.me/<number>?text=` for the person directly, or `wa.me/?text=` for "Other chat or group".
+1. No in-app chat. Every conversation hands off straight to the person: WhatsApp (`wa.me/<number>?text=`), Messages (`sms:`) or a call (`tel:`), via `src/lib/reply.tsx` (decision 45). No group picker.
 2. 5 seconds per session, max. Fewer screens, fewer taps.
 3. Low frequency by design. No streaks, nags or feeds.
 4. You choose who hears. A beacon reaches only the friends or circles picked each time. Circles are private to their owner.

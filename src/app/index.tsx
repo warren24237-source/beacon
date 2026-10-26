@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, KeyboardAvoidingView, Modal, Platform, type ScrollViewInstance, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import { AppState, KeyboardAvoidingView, Platform, type ScrollViewInstance, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth';
@@ -26,6 +26,7 @@ import {
 import { BeaconGlow, UnlitLamp } from '@/lib/glow';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
 import { PollsHome } from '@/lib/pollsHome';
+import { Sheet } from '@/lib/sheet';
 import { enableMatchAlerts } from '@/lib/push';
 import { ReplyIcons } from '@/lib/reply';
 import { supabase } from '@/lib/supabase';
@@ -62,6 +63,9 @@ export default function Home() {
   const [answeredNow, setAnsweredNow] = useState<string[]>([]);
   const [tab, setTab] = useState<'now' | 'date'>('now');
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const composerRef = useRef<ComposerHandle>(null);
+  const [lighting, setLighting] = useState(false);
+  const [lightError, setLightError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
@@ -222,49 +226,62 @@ export default function Home() {
       </KeyboardAvoidingView>
 
       {/* Lighting a beacon: a sheet that slides up from the lamp (decision 43). */}
-      <Modal visible={composing} transparent animationType="slide" onRequestClose={() => setComposing(false)}>
-        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrap}>
-          <Pressable style={{ flex: 1 }} onPress={() => setComposing(false)} accessibilityLabel="Close" />
-          <View style={styles.sheet}>
-            <View style={styles.grab} />
-            <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
-              <Composer
-                userId={userId}
-                friends={friends}
-                circles={circles}
-                replacing={!!mine}
-                onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
-                onCancel={() => setComposing(false)}
-                onLit={async () => {
-                  setComposing(false);
-                  setJustLit(true);
-                  await load();
-                }}
-              />
-            </ScrollView>
+      <Sheet
+        ref={scrollRef}
+        visible={composing}
+        onClose={() => {
+          setComposing(false);
+          setLightError('');
+        }}
+        footer={
+          <View style={{ gap: 10 }}>
+            <ErrorText>{lightError}</ErrorText>
+            <Button label={mine ? 'Update my beacon' : 'Light my beacon'} onPress={() => composerRef.current?.light()} busy={lighting} />
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        }>
+        <Composer
+          ref={composerRef}
+          setBusy={setLighting}
+          setError={setLightError}
+          userId={userId}
+          friends={friends}
+          circles={circles}
+          replacing={!!mine}
+          onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
+          onLit={async () => {
+            setComposing(false);
+            setJustLit(true);
+            await load();
+          }}
+        />
+      </Sheet>
     </SafeAreaView>
   );
 }
 
 // Lighting a beacon ---------------------------------------------------------------
 
+type ComposerHandle = { light: () => void };
+
+// The light form. Its button lives in the sheet's pinned footer, which calls light() through the ref.
 function Composer({
+  ref,
+  setBusy,
+  setError,
   userId,
   friends,
   circles,
   replacing,
-  onCancel,
   onLit,
   onNoteFocus,
 }: {
+  ref: Ref<ComposerHandle>;
+  setBusy: (b: boolean) => void;
+  setError: (e: string) => void;
   userId: string;
   friends: Friend[];
   circles: Circle[];
   replacing: boolean;
-  onCancel?: () => void;
   onLit: () => void;
   onNoteFocus?: () => void;
 }) {
@@ -276,8 +293,6 @@ function Composer({
   const [customEnd, setCustomEnd] = useState<Date | null>(slots[3] ?? slots[slots.length - 1] ?? null);
   const [audience, setAudience] = useState<string[]>(['everyone']);
   const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
 
   useEffect(() => {
     loadAudience().then((a) => {
@@ -332,6 +347,8 @@ function Composer({
     saveAudience(audience);
     onLit();
   }
+
+  useImperativeHandle(ref, () => ({ light }));
 
   return (
     <View style={{ gap: 18 }}>
@@ -389,9 +406,6 @@ function Composer({
         />
       </View>
 
-      <ErrorText>{error}</ErrorText>
-      <Button label={replacing ? 'Update my beacon' : 'Light my beacon'} onPress={light} busy={busy} />
-      {onCancel && <Button label="Cancel" secondary onPress={onCancel} />}
     </View>
   );
 }
@@ -490,9 +504,6 @@ const styles = StyleSheet.create({
   hero: { gap: 14, paddingTop: 4 },
   pair: { flexDirection: 'row', gap: 12 },
   name: { fontSize: 16, fontWeight: '800' },
-  sheetWrap: { flex: 1, backgroundColor: 'rgba(22,22,22,0.45)' },
-  sheet: { backgroundColor: colors.bg, borderTopWidth: 2, borderColor: colors.ink, borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingHorizontal: 22, paddingTop: 10, maxHeight: '90%' },
-  grab: { alignSelf: 'center', width: 44, height: 4, borderRadius: 2, backgroundColor: colors.ink, opacity: 0.4, marginBottom: 14 },
   group: { gap: 10 },
   muted: { color: colors.muted, fontSize: 14 },
   body: { fontSize: 16 },
