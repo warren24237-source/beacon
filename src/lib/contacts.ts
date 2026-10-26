@@ -1,4 +1,4 @@
-import { Contact, ContactField, requestPermissionsAsync } from 'expo-contacts';
+import { Contact, ContactField, getPermissionsAsync, requestPermissionsAsync } from 'expo-contacts';
 
 import { bestNumber, normaliseNumber } from './phone';
 import { supabase } from './supabase';
@@ -9,6 +9,17 @@ export type ContactMatch = { id: string; full_name: string; phone_number: string
 export type PhoneContact = { key: string; name: string; number: string; match: ContactMatch | null };
 
 type Result = { ok: true; people: PhoneContact[] } | { ok: false; reason: string };
+
+/** Whether Beacon may read contacts yet: 'granted', or 'ask' (show our explanation first), or 'blocked' (only phone settings can change it). */
+export async function contactsStatus(): Promise<'granted' | 'ask' | 'blocked'> {
+  try {
+    const p = await getPermissionsAsync();
+    if (p.status === 'granted') return 'granted';
+    return p.canAskAgain === false ? 'blocked' : 'ask';
+  } catch {
+    return 'ask';
+  }
+}
 
 // The last list read this session, so "Add a friend" opens instantly; it refreshes quietly behind.
 let cache: PhoneContact[] | null = null;

@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, Share, StyleSheet, View } from 'react-nat
 
 import { useAuth } from '@/lib/auth';
 import { fetchCircles, fetchFriends, type Circle, type Friend } from '@/lib/beacon';
-import { cachedContacts, loadPhoneContacts, type PhoneContact } from '@/lib/contacts';
+import { cachedContacts, contactsStatus, loadPhoneContacts, type PhoneContact } from '@/lib/contacts';
 import { inviteText } from '@/lib/invite';
 import { normaliseNumber } from '@/lib/phone';
 import { Sheet } from '@/lib/sheet';
@@ -178,6 +178,8 @@ export default function Friends() {
         </>
       )}
 
+      {friends !== null && <DeleteAccount />}
+
       <AddSheet visible={adding} myCode={myCode} onClose={() => setAdding(false)} onChanged={load} />
 
       {/* Put them in a circle? */}
@@ -242,18 +244,36 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
       setError('');
     }
   }
+  // Google Play: explain why before the phone asks for contacts. Only read them once allowed.
+  const [permission, setPermission] = useState<'granted' | 'ask' | 'blocked' | null>(null);
   useEffect(() => {
     if (!visible) return;
     let live = true;
-    loadPhoneContacts().then((r) => {
+    contactsStatus().then((st) => {
       if (!live) return;
-      if (r.ok) setPeople(r.people);
-      else setProblem(r.reason);
+      setPermission(st);
+      if (st !== 'granted') return;
+      loadPhoneContacts().then((r) => {
+        if (!live) return;
+        if (r.ok) setPeople(r.people);
+        else setProblem(r.reason);
+      });
     });
     return () => {
       live = false;
     };
   }, [visible]);
+
+  async function allowContacts() {
+    const r = await loadPhoneContacts(); // asks the phone for permission, then reads
+    if (r.ok) {
+      setPermission('granted');
+      setPeople(r.people);
+    } else {
+      setPermission(await contactsStatus());
+      setProblem(r.reason);
+    }
+  }
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -304,9 +324,19 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
     <Sheet visible={visible} onClose={onClose}>
       <View style={styles.sheetBody}>
         <Text style={styles.h2}>Add a friend</Text>
-        <TextInput value={q} onChangeText={setQ} placeholder="Search your contacts" autoCorrect={false} />
+        {permission === 'granted' && <TextInput value={q} onChangeText={setQ} placeholder="Search your contacts" autoCorrect={false} />}
         <ErrorText>{error}</ErrorText>
-        {problem ? (
+        {permission === 'ask' ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeTitle}>Find your mates in your contacts</Text>
+            <Text style={styles.body}>
+              Beacon checks your contacts&apos; phone numbers to see who&apos;s already on Beacon, so you can add them, or invite the ones who aren&apos;t. Your contacts stay on your phone: numbers are only compared, never stored.
+            </Text>
+            <Button label="Allow contacts" onPress={allowContacts} />
+          </View>
+        ) : permission === 'blocked' ? (
+          <Text style={styles.muted}>Contacts are switched off for Beacon. You can turn them on in your phone&apos;s settings, or add a mate by code or number below.</Text>
+        ) : problem ? (
           <Text style={styles.muted}>{problem}</Text>
         ) : people === null ? (
           <ActivityIndicator color={colors.ink} style={{ marginVertical: 16 }} />
@@ -561,6 +591,55 @@ function FriendSheet({
   );
 }
 
+// Delete my account (Google Play requirement) -------------------------------------------
+
+function DeleteAccount() {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function remove() {
+    setBusy(true);
+    setError('');
+    const { error } = await supabase.rpc('delete_my_account');
+    if (error) {
+      setBusy(false);
+      return setError(error.message);
+    }
+    // Forget everything this phone remembered about the account, then go back to the join screen.
+    try {
+      const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith('beacon:'));
+      await AsyncStorage.multiRemove(keys);
+    } catch {}
+    await supabase.auth.signOut();
+  }
+
+  return (
+    <View style={styles.danger}>
+      {confirm ? (
+        <>
+          <Text style={styles.body}>
+            <Text style={{ fontWeight: '800' }}>Delete your Beacon account?</Text> Your name, number, friends, circles, beacons and Find a date answers are deleted for good. Nobody is told. You can join again later as new.
+          </Text>
+          <ErrorText>{error}</ErrorText>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Button label="Keep it" secondary onPress={() => setConfirm(false)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Delete" onPress={remove} busy={busy} />
+            </View>
+          </View>
+        </>
+      ) : (
+        <Pressable onPress={() => setConfirm(true)} hitSlop={8} accessibilityRole="button">
+          <Text style={[styles.link, styles.underline]}>Delete my account</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 // Small parts ---------------------------------------------------------------------------
 
 const first = (name: string) => name.split(' ')[0];
@@ -632,4 +711,7 @@ const styles = StyleSheet.create({
   tickOn: { backgroundColor: colors.butter },
   tickMark: { fontWeight: '800', fontSize: 14 },
   confirm: { gap: 12, borderTopWidth: 1.5, borderTopColor: colors.skyDeep, paddingTop: 12 },
+  notice: { gap: 10, backgroundColor: colors.card, ...border, ...shadow.card, padding: 14 },
+  noticeTitle: { fontSize: 17, fontWeight: '800' },
+  danger: { marginTop: 24, gap: 10, borderTopWidth: 1.5, borderTopColor: colors.skyDeep, paddingTop: 16 },
 });
