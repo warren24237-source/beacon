@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   PanResponder,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -17,8 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from './ui';
 
 /**
- * A bottom sheet, three quarters of the screen, you can drag down to close (from the handle, or anywhere once
- * scrolled to the top). Tapping the dimmed area or the back button also closes it.
+ * A bottom sheet, three quarters of the screen, you can drag down to close from the space above it, the handle, or anywhere once
+ * the form is scrolled to the top. Tapping the dimmed area or the back button also closes it.
  */
 export const Sheet = forwardRef<ScrollViewInstance, { visible: boolean; onClose: () => void; footer?: ReactNode; children: ReactNode }>(function Sheet(
   { visible, onClose, footer, children },
@@ -39,7 +38,7 @@ export const Sheet = forwardRef<ScrollViewInstance, { visible: boolean; onClose:
     }
   }, [visible, y]);
 
-  const [{ grip, body }] = useState(() => {
+  const [{ grip, body, scrim }] = useState(() => {
     const drags = (dy: number, dx: number) => dy > 6 && Math.abs(dy) > Math.abs(dx) * 1.5;
     const move = (_e: unknown, g: { dy: number }) => y.setValue(Math.max(0, g.dy));
     const release = (_e: unknown, g: { dy: number; vy: number }) => {
@@ -51,6 +50,15 @@ export const Sheet = forwardRef<ScrollViewInstance, { visible: boolean; onClose:
     };
     const back = () => Animated.spring(y, { toValue: 0, useNativeDriver: true }).start();
     return {
+      // The dimmed space above the sheet: drag it down like the handle, or tap it to close.
+      scrim: PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderMove: move,
+        onPanResponderRelease: (e, g) => (Math.abs(g.dy) < 6 && Math.abs(g.dx) < 6 ? closeRef.current() : release(e, g)),
+        onPanResponderTerminate: back,
+      }),
       // The top strip: claims the touch as soon as a finger lands, so scrolling can't steal it.
       grip: PanResponder.create({
         onStartShouldSetPanResponder: () => true,
@@ -75,7 +83,7 @@ export const Sheet = forwardRef<ScrollViewInstance, { visible: boolean; onClose:
   return (
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <KeyboardAvoidingView behavior="padding" style={styles.wrap}>
-        <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Close" />
+        <View style={styles.scrim} accessible accessibilityRole="button" accessibilityLabel="Close" onAccessibilityTap={onClose} {...scrim.panHandlers} />
         {/* Three quarters of the screen, shrinking (not sliding off the top) when the keyboard is open. */}
         <Animated.View style={[styles.sheet, { height: Dimensions.get('window').height * 0.75 + insets.bottom, transform: [{ translateY: y }] }]} {...body.panHandlers}>
           <View style={styles.handleZone} accessibilityLabel="Drag down to close" {...grip.panHandlers}>
