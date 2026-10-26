@@ -23,8 +23,12 @@ export type PushResult = 'enabled' | 'denied' | 'unavailable';
  * phone's Expo push address to the user's profile. Call it at a moment where the
  * reason is obvious, e.g. when lighting a beacon for the first time.
  */
+let doneFor = '';
+
 export async function enableMatchAlerts(userId: string): Promise<PushResult> {
   if (!Device.isDevice) return 'unavailable';
+  // Already registered this phone for this person since the app opened: nothing to do.
+  if (doneFor === userId) return 'enabled';
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('matches', {
@@ -44,6 +48,7 @@ export async function enableMatchAlerts(userId: string): Promise<PushResult> {
   try {
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
     await supabase.from('profiles').update({ expo_push_token: token }).eq('id', userId);
+    doneFor = userId;
     return 'enabled';
   } catch {
     return 'unavailable';

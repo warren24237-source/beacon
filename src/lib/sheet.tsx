@@ -34,8 +34,12 @@ export const Sheet = forwardRef<
     closeRef.current = onClose;
   }, [onClose]);
 
+  // When it opened: a second tap on the lamp lands on the dimmed area while the sheet is
+  // still sliding up, and mustn't count as "close".
+  const openedAt = useRef(0);
   useEffect(() => {
     if (visible) {
+      openedAt.current = Date.now();
       y.setValue(0);
       atTop.current = true;
     }
@@ -59,7 +63,11 @@ export const Sheet = forwardRef<
         onMoveShouldSetPanResponder: () => true,
         onPanResponderTerminationRequest: () => false,
         onPanResponderMove: move,
-        onPanResponderRelease: (e, g) => (Math.abs(g.dy) < 6 && Math.abs(g.dx) < 6 ? closeRef.current() : release(e, g)),
+        onPanResponderRelease: (e, g) => {
+          if (Math.abs(g.dy) < 6 && Math.abs(g.dx) < 6) {
+            if (Date.now() - openedAt.current > 500) closeRef.current();
+          } else release(e, g);
+        },
         onPanResponderTerminate: back,
       }),
       // The top strip: claims the touch as soon as a finger lands, so scrolling can't steal it.

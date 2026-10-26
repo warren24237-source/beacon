@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, Share, StyleSheet, View } from 'react-nat
 
 import { useAuth } from '@/lib/auth';
 import { fetchCircles, fetchFriends, openWhatsApp, type Circle, type Friend } from '@/lib/beacon';
-import { loadPhoneContacts, type PhoneContact } from '@/lib/contacts';
+import { cachedContacts, loadPhoneContacts, type PhoneContact } from '@/lib/contacts';
 import { inviteText } from '@/lib/invite';
 import { normaliseWhatsAppNumber } from '@/lib/phone';
 import { Sheet } from '@/lib/sheet';
@@ -235,7 +235,7 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
   if (visible !== wasVisible) {
     setWasVisible(visible);
     if (visible) {
-      setPeople(null);
+      setPeople(cachedContacts());
       setProblem('');
       setQ('');
       setMsg('');

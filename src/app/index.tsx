@@ -73,20 +73,39 @@ export default function Home() {
   const [lightError, setLightError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
+  // One refresh at a time: the timer, app focus and notifications can all fire together.
+  // A refresh asked for while one is running runs once straight after, so nothing is missed.
+  const running = useRef<Promise<void> | null>(null);
+  const again = useRef(false);
+  const load = useCallback(async (): Promise<void> => {
     if (!userId) return;
-    const [m, inc, f, c, r] = await Promise.all([
-      fetchMyBeacons(userId),
-      fetchFriendsBeacons(userId),
-      fetchFriends(),
-      fetchCircles(),
-      supabase.rpc('incoming_friend_requests'),
-    ]);
-    setRequestCount((r.data ?? []).length);
-    setMine(m);
-    setIncoming(inc);
-    setFriends(f);
-    setCircles(c);
+    if (running.current) {
+      again.current = true;
+      return running.current;
+    }
+    const run = (async () => {
+      do {
+        again.current = false;
+        const [m, inc, f, c, r] = await Promise.all([
+          fetchMyBeacons(userId),
+          fetchFriendsBeacons(userId),
+          fetchFriends(),
+          fetchCircles(),
+          supabase.rpc('incoming_friend_requests'),
+        ]);
+        setRequestCount((r.data ?? []).length);
+        setMine(m);
+        setIncoming(inc);
+        setFriends(f);
+        setCircles(c);
+      } while (again.current);
+    })();
+    running.current = run;
+    try {
+      await run;
+    } finally {
+      running.current = null;
+    }
   }, [userId]);
 
   useFocusEffect(
@@ -195,11 +214,11 @@ export default function Home() {
         {tab === 'now' && (
           <View style={styles.hero}>
             {mine.length ? (
-              <Pressable onPress={() => setComposing(true)} accessibilityRole="button" accessibilityLabel="Light another beacon">
+              <Pressable onPress={() => !composing && setComposing(true)} accessibilityRole="button" accessibilityLabel="Light another beacon">
                 <BeaconGlow flash={justLit} />
               </Pressable>
             ) : (
-              <UnlitLamp onPress={() => setComposing(true)} />
+              <UnlitLamp onPress={() => !composing && setComposing(true)} />
             )}
             {mine.length ? (
               <Text style={[styles.muted, styles.center]}>Tap the beacon to add another.</Text>
@@ -287,6 +306,7 @@ export default function Home() {
             setComposing(false);
             setReplacing(null);
             setJustLit(true);
+            setTimeout(() => setJustLit(false), 1500); // flash once, not again on the next visit
             await load();
           }}
         />
@@ -384,7 +404,7 @@ function Composer({
     if (!recipientCount) return setError('Nobody is in that circle yet. Add friends to it in Friends.');
 
     setBusy(true);
-    await enableMatchAlerts(userId);
+    enableMatchAlerts(userId); // usually already done when the app opened; never hold up the beacon for it
     const all = audience.includes('everyone');
     const { error } = await supabase.rpc('light_beacon', {
       p_activities: acts,

@@ -10,6 +10,10 @@ export type PhoneContact = { key: string; name: string; number: string; match: C
 
 type Result = { ok: true; people: PhoneContact[] } | { ok: false; reason: string };
 
+// The last list read this session, so "Add a friend" opens instantly; it refreshes quietly behind.
+let cache: PhoneContact[] | null = null;
+export const cachedContacts = () => cache;
+
 /**
  * Reads the phone's contacts (names and numbers), and asks Beacon which numbers belong
  * to people on Beacon. Contacts stay on the phone; numbers are compared on the server, never stored.
@@ -39,5 +43,6 @@ export async function loadPhoneContacts(): Promise<Result> {
     return { key: `${i}`, name: p.name, number: hit ?? p.numbers[0], match: hit ? byNumber.get(hit)! : null };
   });
   out.sort((a, b) => a.name.localeCompare(b.name));
+  cache = out;
   return { ok: true, people: out };
 }
