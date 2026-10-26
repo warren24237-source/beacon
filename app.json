@@ -2,7 +2,7 @@
   "expo": {
     "name": "Beacon",
     "slug": "beacon",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "beacon",
@@ -41,6 +41,7 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/images/notification-icon.png",
           "color": "#FF6B4A"
         }
       ],
