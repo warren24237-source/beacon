@@ -114,7 +114,8 @@ export async function fetchLockedInWith(beaconId: string): Promise<LockedPerson[
   return (data ?? []) as LockedPerson[];
 }
 
-export type BeaconSummary = { sent: number; in: string[] };
+/** `to`: everyone else it went to, by first name (decision 75; missing before migration 0019). */
+export type BeaconSummary = { sent: number; to?: string[]; in: string[] };
 
 /** How many a beacon went to and who's in, by first name (decision 63). Never who it went to or numbers. */
 export async function fetchSummary(beaconId: string): Promise<BeaconSummary | null> {

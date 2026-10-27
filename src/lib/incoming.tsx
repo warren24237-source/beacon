@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useAuth } from './auth';
-import { activityPhrase, type BeaconSummary, fetchFriendsBeacons, fetchLockedInWith, fetchSummary, type LockedPerson, namesList, whenLabel } from './beacon';
+import { activityPhrase, type BeaconSummary, fetchFriendsBeacons, fetchLockedInWith, fetchSummary, type LockedPerson, whenLabel } from './beacon';
 import type { DraftPlace } from './places';
 import { PlaceRow, PrefPicker, usePlaceNames, WherePicker } from './placeui';
 import { ReplyIcons } from './reply';
 import { WhenTag } from './when';
 import { supabase } from './supabase';
 import { border, Button, colors, ErrorText, shadow, Text } from './ui';
+import { sentToLine, whosInLine } from './words';
 
 export type FriendBeacon = Awaited<ReturnType<typeof fetchFriendsBeacons>>[number];
 
@@ -44,7 +45,7 @@ export function IncomingBeacon({
   const userId = session?.user.id ?? '';
   const mine = places.find((p) => p.suggested_by === userId);
 
-  // "Sent to 6 · Charlotte and Kat are in" (decision 63): a count and first names, never who it went to.
+  // "Sent to you, Kat and Sam · Kat is in" (decision 75, replacing 63's count): first names only, never numbers.
   const [summary, setSummary] = useState<BeaconSummary | null>(null);
   const inCount = beacon.responses.length;
   useEffect(() => {
@@ -77,7 +78,7 @@ export function IncomingBeacon({
       </View>
       {summary && (
         <Text style={styles.small}>
-          Sent to {summary.sent} · {summary.in.length ? `${namesList(summary.in)} ${summary.in.length === 1 ? 'is' : 'are'} in` : 'nobody in yet'}
+          {sentToLine(summary.to, summary.sent)} · {whosInLine(summary.in)}
         </Text>
       )}
       {places.map((p) => (
@@ -141,7 +142,7 @@ export function IncomingBeacon({
         </View>
       )}
       <Text style={styles.small}>
-        {locked ? 'Only the people who are in can see this. You can message your friends here.' : "Everyone it went to sees who's in, by first name. Hiding is silent."}
+        {locked ? 'Only the people who are in can see this. You can message your friends here.' : "Everyone it went to sees who it went to and who's in, by first name. Hiding is silent."}
       </Text>
     </View>
   );
