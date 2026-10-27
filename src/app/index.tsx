@@ -689,12 +689,29 @@ function MyBeaconCard({
   const locked = !!beacon.locked_at;
   const firstNames = responders.map((p) => p.full_name);
   const onlyWho = firstNames.length <= 1 ? firstNames.join('') : `${firstNames.slice(0, -1).join(', ')} and ${firstNames[firstNames.length - 1]}`;
-  const act = async (fn: string, done?: () => void) => {
+  const act = async (fn: string, done?: () => void, extra?: Record<string, unknown>) => {
     setBusy(true);
-    await supabase.rpc(fn, { p_beacon_id: beacon.id });
+    await supabase.rpc(fn, { p_beacon_id: beacon.id, ...extra });
     setBusy(false);
     (done ?? onOut)();
   };
+
+  // Lock it in also confirms the place (decision 77). One place: straight to it. Several: "Where?".
+  // Once locked, "Change" re-picks. Either way the people who are in get a buzz naming the place.
+  const [picking, setPicking] = useState(false);
+  const going = locked && places.some((p) => p.position === beacon.confirmed_position) ? beacon.confirmed_position! : null;
+  const placeArgs = (pos: number | null) => {
+    const p = places.find((x) => x.position === pos);
+    return { p_position: pos, p_place_name: p ? placeName(p) : null };
+  };
+  const lockAt = (pos: number | null) => act('lock_beacon', onOut, placeArgs(pos));
+  const pick = (pos: number | null) => {
+    setPicking(false);
+    if (locked) act('set_beacon_place', onOut, placeArgs(pos));
+    else lockAt(pos);
+  };
+  const tapLock = () => (places.length === 0 ? act('lock_beacon') : places.length === 1 ? lockAt(places[0].position) : setPicking(true));
+  const votesFor = (pos: number) => prefs.filter((x) => x.position === pos).map((x) => nameOf(x.user_id)).filter(Boolean);
 
   return (
     <View style={styles.mine}>
@@ -727,12 +744,24 @@ function MyBeaconCard({
           {locked && <Text style={styles.muted}>Locked in. Only {onlyWho} can see it, and nobody new can join.</Text>}
           {places.length > 0 && (
             <View style={{ gap: 8 }}>
-              {responders.length > 0 && <Label>Who prefers where</Label>}
+              {responders.length > 0 && <Label>{locked ? 'Where' : 'Who prefers where'}</Label>}
               {places.map((p) => {
-                const who = prefs.filter((x) => x.position === p.position).map((x) => nameOf(x.user_id)).filter(Boolean);
-                return <PlaceRow key={p.position} place={p} tag={p.suggested_by ? `${nameOf(p.suggested_by) || 'A friend'}'s idea` : p.starred ? 'My pick' : undefined} right={responders.length ? (who.length ? who.join(', ') : 'nobody yet') : undefined} />;
+                const who = votesFor(p.position);
+                const isGoing = going === p.position;
+                return (
+                  <PlaceRow
+                    key={p.position}
+                    place={p}
+                    tag={p.suggested_by ? `${nameOf(p.suggested_by) || 'A friend'}'s idea` : p.starred ? 'My pick' : undefined}
+                    right={responders.length ? (who.length ? who.join(', ') : 'nobody yet') : undefined}
+                    going={isGoing}
+                    faded={going !== null && !isGoing}
+                    onChange={isGoing ? () => setPicking(true) : undefined}
+                  />
+                );
               })}
-              {anyFine.length > 0 && <Text style={styles.muted}>Any is fine: {anyFine.join(', ')}</Text>}
+              {anyFine.length > 0 && going === null && <Text style={styles.muted}>Any is fine: {anyFine.join(', ')}</Text>}
+              {locked && going === null && <Button label="Pick the place" variant="butter" compact busy={busy} onPress={() => setPicking(true)} />}
             </View>
           )}
           {responders.length ? (
@@ -753,7 +782,7 @@ function MyBeaconCard({
           )}
           {!locked && responders.length > 0 && (
             // Decision 61: one tap, no confirm, because Unlock undoes it.
-            <Button label="Lock it in" variant="butter" compact busy={busy} onPress={() => act('lock_beacon')} />
+            <Button label={places.length === 1 ? `Lock it in at ${placeName(places[0]) || 'that place'}` : 'Lock it in'} variant="butter" compact busy={busy} onPress={tapLock} />
           )}
           <View style={styles.mineActs}>
             {locked ? (
@@ -771,11 +800,47 @@ function MyBeaconCard({
           </View>
         </View>
       )}
+
+      <Sheet visible={picking} onClose={() => setPicking(false)} fit>
+        <View style={{ gap: 10, paddingBottom: 8 }}>
+          <Text style={styles.h2}>{locked ? 'Change the place' : 'Where?'}</Text>
+          <Text style={styles.muted}>
+            {onlyWho} {responders.length === 1 ? 'gets' : 'get'} a buzz{locked ? ' with the new place.' : ': locked in, and where.'}
+          </Text>
+          {places.map((p) => {
+            const who = votesFor(p.position);
+            return (
+              <Pressable
+                key={p.position}
+                onPress={() => pick(p.position)}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.pick, going === p.position && { backgroundColor: colors.butter }, pressed && { transform: [{ translateX: 3 }, { translateY: 3 }], boxShadow: 'none' }]}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.pickName} numberOfLines={1}>
+                    {placeName(p) || '…'}
+                  </Text>
+                  <Text style={styles.pickSub} numberOfLines={1}>
+                    {p.suggested_by ? `${nameOf(p.suggested_by) || 'A friend'}'s idea` : p.starred ? 'My pick' : p.place_id ? cachedPlace(p.place_id)?.area ?? '' : 'Not on Maps'}
+                  </Text>
+                </View>
+                {who.length > 0 && <Text style={styles.pickSub}>{`${who.join(', ')} ${who.length === 1 ? 'prefers' : 'prefer'} it`}</Text>}
+              </Pressable>
+            );
+          })}
+          <Pressable onPress={() => pick(null)} accessibilityRole="button" style={[styles.pick, styles.pickLater]}>
+            <Text style={styles.pickName}>{locked ? 'Not sure yet' : 'Not sure yet, lock it in anyway'}</Text>
+          </Pressable>
+        </View>
+      </Sheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  pick: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card, ...border, paddingVertical: 11, paddingHorizontal: 12, ...shadow.select },
+  pickLater: { backgroundColor: colors.bg, borderStyle: 'dashed', boxShadow: 'none' },
+  pickName: { fontSize: 16, fontWeight: '800' },
+  pickSub: { fontSize: 12, color: colors.muted },
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: 22, gap: 20, paddingBottom: 48 },
   top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

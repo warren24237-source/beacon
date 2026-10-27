@@ -8,6 +8,23 @@
 --   * people newly added to Who get the normal new-beacon buzz; people taken off lose it, silently;
 --   * everyone else sees the new details without a buzz.
 -- Same signature and return value, so installed apps get the fix with no update.
+--
+-- Also lays the ground for Lock it in with a place (decision 77, migration 0021): the confirmed
+-- place is a position on the beacon, cleared automatically if that place is deleted, and
+-- carried over here when the owner changes the beacon.
+
+alter table public.beacons add column if not exists confirmed_position smallint;
+
+create or replace function public.clear_confirmed_place() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.beacons set confirmed_position = null where id = old.beacon_id and confirmed_position = old.position;
+  return old;
+end;
+$$;
+drop trigger if exists beacon_places_clear_confirmed on public.beacon_places;
+create trigger beacon_places_clear_confirmed after delete on public.beacon_places
+  for each row execute function public.clear_confirmed_place();
 
 create or replace function public.light_beacon(
   p_activities text[], p_note text, p_start timestamptz, p_end timestamptz, p_all boolean, p_circle_ids uuid[],
@@ -19,7 +36,7 @@ returns json language plpgsql security definer set search_path = public
 as $$
 declare
   b uuid; n int; me_name text; tokens text[]; places_txt text := ''; nm text[]; body text;
-  editing boolean := false; who uuid[]; old_places jsonb;
+  editing boolean := false; who uuid[]; old_places jsonb; confirmed jsonb;
 begin
   if not public.is_member() then raise exception 'Join Beacon first'; end if;
   if p_end <= now() then raise exception 'That time has already passed'; end if;
@@ -40,6 +57,9 @@ begin
 
     -- The owner's places (1 to 3) are replaced; friends' suggestions (4 to 12) stay.
     -- A favourite follows its place to its new position, or becomes "any" if the place was removed.
+    select jsonb_build_object('place_id', bp.place_id, 'label', bp.label) into confirmed
+      from public.beacons bb join public.beacon_places bp on bp.beacon_id = bb.id and bp.position = bb.confirmed_position
+      where bb.id = b and bp.position <= 3 and bp.suggested_by is null;
     select coalesce(jsonb_agg(jsonb_build_object('position', position, 'place_id', place_id, 'label', label)), '[]'::jsonb)
       into old_places from public.beacon_places where beacon_id = b and position <= 3 and suggested_by is null;
     delete from public.beacon_places where beacon_id = b and position <= 3 and suggested_by is null;
@@ -61,6 +81,13 @@ begin
                       where (op->>'position')::smallint = pp.position limit 1),
           updated_at = now()
       where pp.beacon_id = b and pp.position <= 3;
+    if confirmed is not null then
+      update public.beacons set confirmed_position = (
+        select np.position from public.beacon_places np
+        where np.beacon_id = b and np.position <= 3 and np.suggested_by is null
+          and np.place_id is not distinct from (confirmed->>'place_id') and np.label is not distinct from (confirmed->>'label')
+        limit 1) where id = b;
+    end if;
   end if;
 
   -- Who it goes to now.

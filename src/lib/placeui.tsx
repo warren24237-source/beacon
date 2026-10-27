@@ -24,36 +24,57 @@ export function placeName(p: BeaconPlace, v = 0): string {
   return p.label ?? (p.place_id ? placeInfo(p.place_id, v)?.name ?? '' : '');
 }
 
-/** One place on a card. Real places open in Google Maps; typed ones just show. */
-export function PlaceRow({ place, tag, right }: { place: BeaconPlace; tag?: string; right?: string }) {
+/**
+ * One place on a card. Real places open in Google Maps; typed ones just show.
+ * going: the confirmed place once locked in (decision 77): butter, a tick, "Going here".
+ * faded: another place on a beacon that has a confirmed one. onChange: the owner's "Change" link.
+ */
+export function PlaceRow({ place, tag, right, going, faded, onChange }: { place: BeaconPlace; tag?: string; right?: string; going?: boolean; faded?: boolean; onChange?: () => void }) {
   const v = usePlacesVersion();
   const info = place.place_id ? placeInfo(place.place_id, v) : undefined;
   const isText = !place.place_id;
   const name = isText ? place.label : info?.name;
   const inner = (
     <>
-      {isText ? <Pen /> : <Pin size={22} />}
+      {going ? (
+        <View style={styles.tick}>
+          <MaterialCommunityIcons name="check" size={15} color={colors.butter} />
+        </View>
+      ) : isText ? (
+        <Pen />
+      ) : (
+        <Pin size={22} />
+      )}
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.nameRow}>
           <Text style={styles.name} numberOfLines={1}>
             {name ?? '…'}
           </Text>
-          {tag ? (
+          {tag && !going ? (
             <View style={styles.tag}>
               <Text style={styles.tagText}>{tag}</Text>
             </View>
           ) : null}
         </View>
-        <Text style={styles.area} numberOfLines={1}>
-          {isText ? 'Not on Maps' : info?.area ?? ''}
+        <Text style={[styles.area, going && styles.goingText]} numberOfLines={1}>
+          {going ? 'Going here' : isText ? 'Not on Maps' : info?.area ?? ''}
         </Text>
       </View>
-      {right ? <Text style={styles.right}>{right}</Text> : !isText && info ? <Text style={styles.right}>Maps ›</Text> : null}
+      {onChange ? (
+        <Pressable onPress={onChange} hitSlop={10} accessibilityRole="button" accessibilityLabel="Change the place">
+          <Text style={styles.change}>Change</Text>
+        </Pressable>
+      ) : right ? (
+        <Text style={styles.right}>{right}</Text>
+      ) : !isText && info ? (
+        <Text style={styles.right}>Maps ›</Text>
+      ) : null}
     </>
   );
-  if (isText || !info) return <View style={[styles.row, isText && styles.rowText]}>{inner}</View>;
+  const look = [styles.row, isText && styles.rowText, going && styles.rowGoing, faded && styles.rowFaded];
+  if (isText || !info) return <View style={look}>{inner}</View>;
   return (
-    <Pressable onPress={() => openInMaps(info)} accessibilityRole="link" accessibilityLabel={`Open ${info.name} in Maps`} style={styles.row}>
+    <Pressable onPress={() => openInMaps(info)} accessibilityRole="link" accessibilityLabel={`Open ${info.name} in Maps`} style={look}>
       {inner}
     </Pressable>
   );
@@ -263,6 +284,11 @@ export function PrefPicker({ beaconId, places, mine, onSaved }: { beaconId: stri
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bg, borderWidth: 1.5, borderColor: colors.ink, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 10 },
   rowText: { backgroundColor: colors.card },
+  rowGoing: { backgroundColor: colors.butter, borderWidth: 2, ...shadow.select },
+  rowFaded: { opacity: 0.5 },
+  tick: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  goingText: { color: colors.ink, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11 },
+  change: { fontSize: 13, fontWeight: '800', textDecorationLine: 'underline' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { fontSize: 15, fontWeight: '800', flexShrink: 1 },
   area: { fontSize: 12, color: colors.muted },

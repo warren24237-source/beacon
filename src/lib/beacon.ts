@@ -16,6 +16,8 @@ export type Beacon = {
   is_active: boolean;
   /** Set once the owner taps "Lock it in" (decision 61). */
   locked_at?: string | null;
+  /** The place it was locked in at, a position in beacon_places (decision 77). */
+  confirmed_position?: number | null;
   owner?: { full_name: string; phone_number: string | null } | null;
   beacon_places?: BeaconPlace[];
   /** Preferences: on your beacons, everyone's; on friends' beacons, only yours (row rules). */

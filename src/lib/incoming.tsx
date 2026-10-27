@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useAuth } from './auth';
 import { activityPhrase, type BeaconSummary, fetchFriendsBeacons, fetchLockedInWith, fetchSummary, type LockedPerson, whenLabel } from './beacon';
 import type { DraftPlace } from './places';
-import { PlaceRow, PrefPicker, usePlaceNames, WherePicker } from './placeui';
+import { PlaceRow, placeName, PrefPicker, usePlaceNames, WherePicker } from './placeui';
 import { ReplyIcons } from './reply';
 import { WhenTag } from './when';
 import { supabase } from './supabase';
@@ -58,6 +58,8 @@ export function IncomingBeacon({
   }, [locked, beacon.id]);
   // people[0] is the owner (see locked_in_with); the rest are the others who are in.
   const others = people.slice(1).map((p) => p.full_name);
+  // The place it was locked in at (decision 77). Only people who are in see a locked beacon.
+  const going = locked ? places.find((p) => p.position === beacon.confirmed_position) ?? null : null;
 
   async function imIn() {
     setBusy(true);
@@ -82,7 +84,13 @@ export function IncomingBeacon({
         </Text>
       )}
       {places.map((p) => (
-        <PlaceRow key={p.position} place={p} tag={p.suggested_by ? (p.suggested_by === userId ? 'Your idea' : 'Suggested') : p.starred ? 'Their pick' : undefined} />
+        <PlaceRow
+          key={p.position}
+          place={p}
+          tag={p.suggested_by ? (p.suggested_by === userId ? 'Your idea' : 'Suggested') : p.starred ? 'Their pick' : undefined}
+          going={going?.position === p.position}
+          faded={!!going && going.position !== p.position}
+        />
       ))}
       {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
       <ErrorText>{error}</ErrorText>
@@ -96,9 +104,9 @@ export function IncomingBeacon({
               </Pressable>
             )}
           </View>
-          <Text style={styles.in}>{others.length ? `You're in with ${others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}` : others[0]}.` : `It's you and ${name}.`}</Text>
-          {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
-          <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />
+          <Text style={styles.in}>{going ? `At ${placeName(going) || 'the place above'}. ` : ''}{others.length ? `You're in with ${others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}` : others[0]}.` : `It's you and ${name}.`}</Text>
+          {!going && places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
+          {!going && <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />}
           <CantMakeIt beaconId={beacon.id} name={name} onDone={onDone} />
           <Text style={styles.small}>Who&apos;s in</Text>
           {people.map((p) => (
