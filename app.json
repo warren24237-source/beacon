@@ -2,13 +2,12 @@
   "expo": {
     "name": "Beacon",
     "slug": "beacon",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "beacon",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.warrenporter.beacon",
       "supportsTablet": false,
       "infoPlist": {
@@ -42,7 +41,7 @@
         {
           "backgroundColor": "#DCECFF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 120
+          "imageWidth": 130
         }
       ],
       [
