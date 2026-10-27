@@ -275,9 +275,12 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
     }
   }
 
+  // People on Beacon sit in their own short section at the top, everyone else A to Z underneath, so "who can I add?"
+  // is answered as soon as the list opens, with no toggle to find (decision 74).
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return (people ?? []).filter((p) => !t || p.name.toLowerCase().includes(t)).slice(0, 200);
+    const all = (people ?? []).filter((p) => !t || p.name.toLowerCase().includes(t));
+    return { on: all.filter((p) => p.match), off: all.filter((p) => !p.match).slice(0, 200) };
   }, [people, q]);
 
   async function add(p: PhoneContact) {
@@ -340,36 +343,48 @@ function AddSheet({ visible, myCode, onClose, onChanged }: { visible: boolean; m
           <Text style={styles.muted}>{problem}</Text>
         ) : people === null ? (
           <ActivityIndicator color={colors.ink} style={{ marginVertical: 16 }} />
-        ) : shown.length === 0 ? (
+        ) : shown.on.length + shown.off.length === 0 ? (
           <Text style={styles.muted}>{people.length ? 'Nobody in your contacts called that.' : 'No contacts with a mobile number.'}</Text>
         ) : (
-          <View style={styles.list}>
-            {shown.map((p, i) => {
-              const m = p.match;
-              const state = m ? (sent[m.id] ?? m.status) : null;
-              return (
-                <View key={p.key} style={[styles.row, i > 0 && styles.rowLine]}>
-                  <Avatar name={p.name} ghost={!m} />
-                  <View style={styles.grow}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {p.name}
-                    </Text>
-                    <Text style={styles.sub}>{m ? 'On Beacon' : invited[p.key] ? 'Invited' : 'Not on Beacon yet'}</Text>
+          <View style={{ gap: 14 }}>
+            {[
+              { key: 'on', title: 'On Beacon', list: shown.on },
+              { key: 'off', title: shown.on.length ? 'Everyone else' : 'Not on Beacon yet', list: shown.off },
+            ]
+              .filter((sec) => sec.list.length)
+              .map((sec) => (
+                <View key={sec.key} style={{ gap: 6 }}>
+                  <Label>{sec.title}</Label>
+                  <View style={styles.list}>
+                    {sec.list.map((p, i) => {
+                      const m = p.match;
+                      const state = m ? (sent[m.id] ?? m.status) : null;
+                      return (
+                        <View key={p.key} style={[styles.row, i > 0 && styles.rowLine]}>
+                          <Avatar name={p.name} ghost={!m} />
+                          <View style={styles.grow}>
+                            <Text style={styles.name} numberOfLines={1}>
+                              {p.name}
+                            </Text>
+                            <Text style={styles.sub}>{m ? 'On Beacon' : invited[p.key] ? 'Invited' : 'Not on Beacon yet'}</Text>
+                          </View>
+                          {state === 'friends' ? (
+                            <Text style={styles.state}>Friends</Text>
+                          ) : state === 'requested' ? (
+                            <Text style={styles.state}>Requested</Text>
+                          ) : state === 'incoming' ? (
+                            <Text style={styles.state}>Wants to add you</Text>
+                          ) : m ? (
+                            <SmallButton label="Add" onPress={() => add(p)} />
+                          ) : (
+                            <SmallButton label={invited[p.key] ? 'Invite again' : 'Invite'} invite={!invited[p.key]} onPress={() => invite(p)} />
+                          )}
+                        </View>
+                      );
+                    })}
                   </View>
-                  {state === 'friends' ? (
-                    <Text style={styles.state}>Friends</Text>
-                  ) : state === 'requested' ? (
-                    <Text style={styles.state}>Requested</Text>
-                  ) : state === 'incoming' ? (
-                    <Text style={styles.state}>Wants to add you</Text>
-                  ) : m ? (
-                    <SmallButton label="Add" onPress={() => add(p)} />
-                  ) : (
-                    <SmallButton label={invited[p.key] ? 'Invite again' : 'Invite'} invite={!invited[p.key]} onPress={() => invite(p)} />
-                  )}
                 </View>
-              );
-            })}
+              ))}
           </View>
         )}
 
