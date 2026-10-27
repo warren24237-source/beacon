@@ -20,6 +20,7 @@ import {
   fmtRange,
   fmtTime,
   halfHourSlots,
+  namesList,
   loadHidden,
   presetWindows,
   upcomingDays,
@@ -483,9 +484,14 @@ function Composer({
     });
   };
 
-  const recipientCount = audience.includes('everyone')
-    ? friends.length
-    : new Set(circles.filter((c) => audience.includes(c.id)).flatMap((c) => c.member_ids)).size;
+  // Who it actually reaches, by name, each person once (27 Oct): circles alone don't say who's in them.
+  const recipients = useMemo(() => {
+    if (audience.includes('everyone')) return friends.map((f) => f.full_name);
+    const ids: string[] = [];
+    audience.forEach((cid) => circles.find((c) => c.id === cid)?.member_ids.forEach((m) => !ids.includes(m) && ids.push(m)));
+    return ids.map((id) => friends.find((f) => f.id === id)?.full_name).filter(Boolean) as string[];
+  }, [audience, circles, friends]);
+  const recipientCount = recipients.length;
 
   const chosen = windowId === 'custom' ? { start: customStart, end: customEnd } : presets.find((p) => p.id === windowId);
   const hasWhen = !!chosen?.start && !!chosen?.end && chosen.end > chosen.start;
@@ -608,13 +614,24 @@ function Composer({
       </View>
 
       <View style={styles.group}>
-        <Label>{audience.length ? `Who · ${recipientCount} ${recipientCount === 1 ? 'friend' : 'friends'}` : 'Who'}</Label>
+        <Label>Who</Label>
         <Chips>
           <Chip label="Everyone" on={audience.includes('everyone')} onPress={() => toggleAudience('everyone')} />
           {circles.map((c) => (
             <Chip key={c.id} label={c.name} on={audience.includes(c.id)} onPress={() => toggleAudience(c.id)} />
           ))}
         </Chips>
+        {audience.length > 0 && (
+          <Text style={styles.muted}>
+            {recipients.length ? (
+              <>
+                Goes to: <Text style={styles.goesNames}>{namesList(recipients)}</Text>
+              </>
+            ) : (
+              'Nobody is in that circle yet.'
+            )}
+          </Text>
+        )}
       </View>
 
       <View style={styles.group}>
@@ -776,6 +793,7 @@ const styles = StyleSheet.create({
   heroAlone: { flex: 1, justifyContent: 'center', paddingBottom: 60 },
   dim: { position: 'absolute', top: -10, left: -22, right: -22, bottom: -48, backgroundColor: colors.bg, opacity: 0.85 },
   previewText: { color: colors.ink, fontWeight: '800' },
+  goesNames: { color: colors.ink, fontWeight: '800' },
   ownBox: { flexDirection: 'row', gap: 8, width: '100%' },
   ownInput: { flex: 1, paddingVertical: 8 },
   ownAdd: { backgroundColor: colors.ink, ...border, paddingHorizontal: 14, justifyContent: 'center' },
