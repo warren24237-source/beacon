@@ -25,12 +25,12 @@ Project docs (brief, decisions, roadmap, open questions) and the **current statu
 - `src/app/`: screens (Expo Router). `join` → `phone` (only if missing) → `index` (home) and `friends`, guarded in `_layout.tsx`.
 - `src/lib/`: Supabase client, auth context, shared UI.
 - `supabase/migrations/`: SQL, applied in order via the Supabase Management API (Claude holds a token per session) or the SQL Editor.
-- Updates: `eas update --channel preview --environment preview --platform android` (Warren and Kat both on preview for now). Native changes need `eas build --profile preview`.
+- Updates: `eas update --channel production --environment production --platform all`, with Warren's OK (decision 68: one lane, no preview). Native changes need `eas build --profile production` for Android and iOS, then submit to Play internal testing and TestFlight, then republish the latest update to `production`.
 
 ## Working rules
 - Warren can't install desktop software. Builds go through EAS in the cloud.
 - Run `npm run check` (typecheck, lint, tests) before every commit. GitHub runs the same on every push (`.github/workflows/checks.yml`).
 - Pure logic (dates, times, wording, phone numbers) lives in import-free files (`src/lib/time.ts`, `src/lib/phone.ts`) with tests in `src/lib/__tests__/`. Add a test when fixing a bug there.
-- Lanes: one `preview` lane for Warren and Kat for now. A `staging` lane (Warren only, "Test lane" label) is set up in eas.json but parked until Beacon goes beyond the two of them; then updates go to staging first and are copied to preview with `eas update:republish --group <id> --destination-channel preview`. `production` only on Warren's say-so.
+- Lanes: `production` only (Play internal testing and TestFlight installs). `preview` was retired 27 Oct 2026 (decision 68); its phones stay frozen on their last update. The `staging` and `preview` build profiles stay in eas.json, unused. Database migrations have no lanes: they reach every installed version at once, so keep them backward compatible.
 - Never commit `.env`.
 - Never use em dashes in copy or docs. Use a full stop or a comma.
