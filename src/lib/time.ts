@@ -69,7 +69,7 @@ export function presetWindows(offset = 0, now = new Date()): Window[] {
   add('lunch', 'Lunch', at(day, 12), at(day, 14));
   add('afternoon', 'Afternoon', at(day, 14), at(day, 17));
   add('early', 'Early evening', at(day, 17), at(day, 19));
-  add('tonight', 'Tonight', at(day, 19), at(day, 23));
+  add('tonight', offset === 0 ? 'Tonight' : 'Evening', at(day, 19), at(day, 23)); // "Tonight" only means today
   return list;
 }
 
@@ -84,6 +84,34 @@ export function halfHourSlots(offset = 0, now = new Date()): Date[] {
     d.setMinutes(d.getMinutes() + 30);
   }
   return slots;
+}
+
+/** Recent activities first (up to 3, newest first, no repeats, never "Anything"), then the standard list. */
+export function activityOptions(recentBeacons: string[][], standard: readonly string[]): { label: string; recent: boolean }[] {
+  const recents: string[] = [];
+  for (const acts of recentBeacons) {
+    for (const a of acts) {
+      const t = a.trim();
+      if (t && t !== 'Anything' && !recents.some((r) => r.toLowerCase() === t.toLowerCase())) recents.push(t);
+      if (recents.length === 3) break;
+    }
+    if (recents.length === 3) break;
+  }
+  const rest = standard.filter((s) => !recents.some((r) => r.toLowerCase() === s.toLowerCase()));
+  return [...recents.map((label) => ({ label, recent: true })), ...rest.map((label) => ({ label, recent: false }))];
+}
+
+/** Tidies typed text into an activity: trimmed, single spaces, capital first letter, 20 characters max. */
+export function cleanActivity(s: string): string {
+  const t = s.replace(/\s+/g, ' ').trim().slice(0, 20).trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : '';
+}
+
+/** The notification friends get, as close to the server's wording (light_beacon) as the phone can make it. */
+export function beaconPreview(name: string, acts: string[], start: Date, end: Date, now = new Date()): string {
+  const diff = Math.round((dayStart(0, start).getTime() - dayStart(0, now).getTime()) / 864e5);
+  const day = diff <= 0 ? '' : diff === 1 ? 'tomorrow, ' : `${DAY_NAMES[start.getDay()]} ${start.getDate()} ${MONTHS[start.getMonth()]}, `;
+  return `${name}'s up for ${activityPhrase(acts)}, ${day}${fmtRange(start, end)}`;
 }
 
 export function activityPhrase(acts: string[]): string {

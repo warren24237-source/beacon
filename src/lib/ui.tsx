@@ -91,13 +91,30 @@ export function Label({ children }: { children: ReactNode }) {
   return <Text style={styles.label}>{children}</Text>;
 }
 
-export function Chip({ label, sub, on, onPress }: { label: string; sub?: string; on?: boolean; onPress: () => void }) {
+export function Chip({
+  label,
+  sub,
+  on,
+  onPress,
+  icon,
+  dashed,
+}: {
+  label: string;
+  sub?: string;
+  on?: boolean;
+  onPress: () => void;
+  /** A small mark before the label, e.g. the clock on a recent activity. */
+  icon?: ReactNode;
+  /** Dashed outline for "add your own" style chips. */
+  dashed?: boolean;
+}) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && pushed(on ? 3 : 0)]}
+      style={({ pressed }) => [styles.chip, icon ? styles.chipRow : null, dashed && styles.chipDashed, on && styles.chipOn, pressed && pushed(on ? 3 : 0)]}
       accessibilityRole="button"
       accessibilityState={{ selected: !!on }}>
+      {icon}
       <Text style={styles.chipText}>
         {label}
         {sub ? <Text style={styles.chipSub}> {sub}</Text> : null}
@@ -188,6 +205,8 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { backgroundColor: colors.card, ...border, paddingVertical: 8, paddingHorizontal: 12 },
   chipOn: { backgroundColor: colors.butter, ...shadow.select },
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  chipDashed: { borderStyle: 'dashed', backgroundColor: colors.bg },
   chipText: { fontSize: 15, fontWeight: '600' },
   chipSub: { color: colors.muted, fontSize: 12, fontWeight: '400' },
   card: { backgroundColor: colors.card, ...border, ...shadow.card, padding: 16, gap: 6 },

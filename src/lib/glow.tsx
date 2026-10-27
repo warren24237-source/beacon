@@ -56,25 +56,58 @@ export function BeaconGlow({ size = 140, flash }: { size?: number; flash?: boole
   );
 }
 
-// The unlit beacon: a plain lamp you tap to light (decision 43).
-export function UnlitLamp({ size = 140, onPress }: { size?: number; onPress: () => void }) {
+// The unlit beacon: a plain lamp you tap (decision 43). nudge: a small bounce every few seconds,
+// so a lamp with no words around it still reads as something to tap (decision 71).
+export function UnlitLamp({ size = 140, onPress, label = 'Make a plan', nudge, dim }: { size?: number; onPress: () => void; label?: string; nudge?: boolean; dim?: boolean }) {
   const disc = size * 0.62;
   const core = disc * 0.38;
   const off = Math.round(disc * 0.08);
+  const [n] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    if (!nudge) return;
+    let loop: Animated.CompositeAnimation | null = null;
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (cancelled || reduce) return;
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.delay(2200),
+          Animated.timing(n, { toValue: 1, duration: 260, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(n, { toValue: 0, duration: 420, easing: Easing.bounce, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+    });
+    return () => {
+      cancelled = true;
+      loop?.stop();
+    };
+  }, [n, nudge]);
+  const bump = { transform: [{ scale: n.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }] };
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Light my beacon" style={[styles.wrap, { width: size, height: size }]}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={[styles.wrap, { width: size, height: size }]}>
       {({ pressed }) => (
-        <>
-          <View
-            style={[
-              styles.disc,
-              { backgroundColor: colors.card, width: disc, height: disc, borderRadius: disc / 2 },
-              pressed ? { transform: [{ translateX: off }, { translateY: off }] } : { boxShadow: `${off}px ${off}px 0px ${colors.ink}` },
-            ]}>
-            <View style={[styles.core, { backgroundColor: colors.bg, width: core, height: core, borderRadius: core / 2 }]} />
-          </View>
-        </>
+        <Animated.View
+          style={[
+            styles.disc,
+            { backgroundColor: colors.card, width: disc, height: disc, borderRadius: disc / 2 },
+            dim && { opacity: 0.45 },
+            pressed ? { transform: [{ translateX: off }, { translateY: off }] } : [{ boxShadow: `${off}px ${off}px 0px ${colors.ink}` }, bump],
+          ]}>
+          <View style={[styles.core, { backgroundColor: colors.bg, width: core, height: core, borderRadius: core / 2 }]} />
+        </Animated.View>
       )}
+    </Pressable>
+  );
+}
+
+// The send button when lighting a beacon (decision 70): just the lamp. Grey until what, when and who
+// are picked, then lit and pulsing. Screen readers hear "Light it".
+export function LampButton({ ready, busy, onPress }: { ready: boolean; busy?: boolean; onPress: () => void }) {
+  if (!ready) return <UnlitLamp size={92} onPress={onPress} label="Light it. Pick what, when and who first" dim />;
+  return (
+    <Pressable onPress={onPress} disabled={busy} accessibilityRole="button" accessibilityLabel="Light it" accessibilityState={{ busy: !!busy }} style={({ pressed }) => [styles.wrap, busy && { opacity: 0.5 }, pressed && { transform: [{ translateX: 3 }, { translateY: 3 }] }]}>
+      <BeaconGlow size={92} />
     </Pressable>
   );
 }

@@ -1,78 +1,41 @@
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { fetchPolls, tally, type Poll } from './polls';
-import { border, Button, colors, Label, shadow, Text } from './ui';
+import { tally, todayYmd, type Poll } from './polls';
+import { border, colors, shadow, Text } from './ui';
 
-// The "Find a date" tab on home: ones you organised, ones you've been asked to.
-export function PollsHome({ userId }: { userId: string }) {
-  const [polls, setPolls] = useState<Poll[] | null>(null);
+// Find a date asks on home (decision 69). They sit in the same lists as beacons, with a small tag.
+// Yours and ones you've answered go under "Your plans"; ones you haven't answered under "Waiting on you".
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchPolls().then(setPolls);
-    }, [])
-  );
-
-  const mine = (polls ?? []).filter((p) => p.owner_id === userId);
-  const asked = (polls ?? []).filter((p) => p.owner_id !== userId);
-
-  return (
-    <View style={{ gap: 18 }}>
-      <View style={{ gap: 6 }}>
-        <Text style={styles.h1}>Find a date</Text>
-        <Text style={styles.muted}>Ask a group when they&apos;re free, weeks ahead.</Text>
-      </View>
-
-      {asked.length > 0 && (
-        <View style={styles.group}>
-          <Label>You&apos;ve been asked</Label>
-          {asked.map((p) => {
-            const me = p.poll_invitees.find((i) => i.user_id === userId);
-            return (
-              <Item
-                key={p.id}
-                title={p.title}
-                sub={`From ${p.owner?.full_name ?? 'a friend'} · ${me?.answered_at ? 'you answered' : 'tap to answer'}`}
-                flag={!me?.answered_at}
-                onPress={() => router.push(`/poll/${p.id}`)}
-              />
-            );
-          })}
-        </View>
-      )}
-
-      {mine.length > 0 && (
-        <View style={styles.group}>
-          <Label>Yours</Label>
-          {mine.map((p) => {
-            const t = tally(p);
-            return (
-              <Item
-                key={p.id}
-                title={p.title}
-                sub={`${t.answered} of ${t.total} answered`}
-                onPress={() => router.push(`/poll/${p.id}`)}
-              />
-            );
-          })}
-        </View>
-      )}
-
-      {polls && polls.length === 0 && <Text style={styles.muted}>Nothing yet. Start one and pick a few dates.</Text>}
-
-      <Button label="Find a date" onPress={() => router.push('/find-date')} />
-    </View>
-  );
+export function splitPolls(all: Poll[], userId: string) {
+  // Once every date has passed, an ask leaves home.
+  const today = todayYmd();
+  const polls = all.filter((p) => p.dates.some((d) => d >= today));
+  const answered = (p: Poll) => !!p.poll_invitees.find((i) => i.user_id === userId)?.answered_at;
+  return {
+    plans: polls.filter((p) => p.owner_id === userId || answered(p)),
+    waiting: polls.filter((p) => p.owner_id !== userId && !answered(p)),
+  };
 }
 
-function Item({ title, sub, flag, onPress }: { title: string; sub: string; flag?: boolean; onPress: () => void }) {
+export function PollRow({ poll, userId }: { poll: Poll; userId: string }) {
+  const own = poll.owner_id === userId;
+  const t = tally(poll);
+  const from = poll.owner?.full_name ?? 'A friend';
+  const waiting = !own && !poll.poll_invitees.find((i) => i.user_id === userId)?.answered_at;
+  const sub = own ? `${t.answered} of ${t.total} answered` : waiting ? `From ${from} · tap to answer` : `From ${from} · you answered`;
   return (
-    <Pressable onPress={onPress} style={styles.item} accessibilityRole="button">
+    <Pressable
+      onPress={() => router.push(`/poll/${poll.id}`)}
+      style={({ pressed }) => [styles.item, waiting && styles.waiting, pressed && { transform: [{ translateX: 3 }, { translateY: 3 }], boxShadow: 'none' }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Find a date: ${poll.title}. ${sub}`}>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={[styles.muted, flag && { color: colors.ink, fontWeight: '800' }]}>{sub}</Text>
+        <Text style={styles.kind}>FIND A DATE</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {poll.title}
+        </Text>
+        <Text style={[styles.sub, waiting && { color: colors.ink, fontWeight: '800' }]}>{sub}</Text>
       </View>
       <Text style={styles.chev}>›</Text>
     </Pressable>
@@ -80,10 +43,10 @@ function Item({ title, sub, flag, onPress }: { title: string; sub: string; flag?
 }
 
 const styles = StyleSheet.create({
-  h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
-  group: { gap: 10 },
-  muted: { color: colors.muted, fontSize: 14 },
-  item: { backgroundColor: colors.card, ...border, ...shadow.card, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  title: { fontSize: 17, fontWeight: '800' },
+  item: { backgroundColor: colors.card, ...border, ...shadow.card, paddingVertical: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  waiting: { backgroundColor: colors.card },
+  kind: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, color: colors.muted },
+  title: { fontSize: 18, fontWeight: '800' },
+  sub: { color: colors.muted, fontSize: 14 },
   chev: { fontSize: 22, fontWeight: '800' },
 });

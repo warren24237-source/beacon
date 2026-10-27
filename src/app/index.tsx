@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
-import * as Updates from 'expo-updates';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { AppState, KeyboardAvoidingView, Platform, type ScrollViewInstance, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -8,7 +9,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/auth';
 import {
   ACTIVITIES,
+  activityOptions,
   activityTitle,
+  beaconPreview,
+  cleanActivity,
   fetchCircles,
   fetchFriends,
   fetchFriendsBeacons,
@@ -16,20 +20,20 @@ import {
   fmtRange,
   fmtTime,
   halfHourSlots,
-  loadAudience,
   loadHidden,
   presetWindows,
   upcomingDays,
   whenLabel,
   type MyBeacon,
-  saveAudience,
   saveHidden,
   type Circle,
   type Friend,
 } from '@/lib/beacon';
-import { BeaconGlow, UnlitLamp } from '@/lib/glow';
+import { BeaconGlow, LampButton, UnlitLamp } from '@/lib/glow';
+import { LampFork } from '@/lib/fork';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
-import { PollsHome } from '@/lib/pollsHome';
+import { fetchPolls, type Poll } from '@/lib/polls';
+import { PollRow, splitPolls } from '@/lib/pollsHome';
 import { Sheet } from '@/lib/sheet';
 import { enableMatchAlerts } from '@/lib/push';
 import { PlaceRow, placeName, usePlaceNames, WherePicker } from '@/lib/placeui';
@@ -53,8 +57,11 @@ function openPollFrom(res: Notifications.NotificationResponse) {
   }
 }
 
+const LAMP_TAPPED = 'beacon:lampTapped';
+
 export default function Home() {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
+  const myName = profile?.full_name ?? '';
   const userId = session?.user.id ?? '';
 
   const [mine, setMine] = useState<MyBeacon[]>([]);
@@ -69,7 +76,13 @@ export default function Home() {
   const [justLit, setJustLit] = useState(false);
   // Beacons answered while on home stay a moment so you can message them, then leave home (decision 44).
   const [answeredNow, setAnsweredNow] = useState<string[]>([]);
-  const [tab, setTab] = useState<'now' | 'date'>('now');
+  const [polls, setPolls] = useState<Poll[]>([]);
+  // The lamp forks into "Up for something" and "Find a day" (decision 69).
+  const [forked, setForked] = useState(false);
+  // One-off "Tap the beacon" hint until the lamp has been tapped once on this phone (decision 71).
+  const [hint, setHint] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [preview, setPreview] = useState('');
   const scrollRef = useRef<ScrollViewInstance>(null);
   const composerRef = useRef<ComposerHandle>(null);
   const [lighting, setLighting] = useState(false);
@@ -89,13 +102,15 @@ export default function Home() {
     const run = (async () => {
       do {
         again.current = false;
-        const [m, inc, f, c, r] = await Promise.all([
+        const [m, inc, f, c, r, pl] = await Promise.all([
           fetchMyBeacons(userId),
           fetchFriendsBeacons(userId),
           fetchFriends(),
           fetchCircles(),
           supabase.rpc('incoming_friend_requests'),
+          fetchPolls(),
         ]);
+        setPolls(pl);
         setRequestCount((r.data ?? []).length);
         setMine(m);
         setIncoming(inc);
@@ -124,7 +139,24 @@ export default function Home() {
 
   useEffect(() => {
     loadHidden().then(setHidden);
+    AsyncStorage.getItem(LAMP_TAPPED)
+      .then((v) => setHint(!v))
+      .catch(() => {});
   }, []);
+
+  const onComposerState = useCallback((r: boolean, p: string) => {
+    setReady(r);
+    setPreview(p);
+  }, []);
+
+  const tapLamp = () => {
+    if (composing) return;
+    setForked((f) => !f);
+    if (hint) {
+      setHint(false);
+      AsyncStorage.setItem(LAMP_TAPPED, '1').catch(() => {});
+    }
+  };
 
   // Opened from a "Find a date" notification while the app was closed: go to it, once.
   const lastTap = useLastTap();
@@ -164,20 +196,23 @@ export default function Home() {
   const isIn = (b: FriendBeacon) => b.responses.some((r) => r.user_id === userId);
   // Home only shows beacons still waiting on you. Answered and hidden ones live in Lit now.
   const waiting = incoming.filter((b) => !hidden.includes(b.id) && (!isIn(b) || answeredNow.includes(b.id)));
+  const pollLists = splitPolls(polls, userId);
+  const alone = !mine.length && !pollLists.plans.length && !waiting.length && !pollLists.waiting.length;
 
   return (
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, alone && !forked && { flexGrow: 1 }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}>
         <View style={styles.top}>
           <View style={styles.wordmark}>
             <View style={[styles.dot, !mine.length && styles.dotOff]} />
             <Text style={styles.wordmarkText}>Beacon</Text>
-            {incoming.length > 0 ? (
+            {/* Friends' lit beacons, including hidden and answered ones. Nothing shows when none are lit. */}
+            {incoming.length > 0 && (
               <Pressable
                 onPress={() => router.push('/lit')}
                 hitSlop={8}
@@ -186,14 +221,8 @@ export default function Home() {
                 style={styles.litFlag}>
                 <Text style={styles.litFlagText}>{incoming.length} lit</Text>
               </Pressable>
-            ) : (
-              <View style={[styles.litFlag, styles.litFlagNone]}>
-                <Text style={[styles.litFlagText, { color: colors.muted, fontWeight: '600' }]}>None lit</Text>
-              </View>
             )}
           </View>
-          {/* Warren's own test lane: updates land here before testers get them. */}
-          {Updates.channel === 'staging' && <Text style={styles.lane}>Test lane</Text>}
           <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
             <Text style={[styles.link, requestCount > 0 && { color: colors.ink, fontWeight: '800' }]}>
               {requestCount > 0 ? `Friends · ${requestCount} new` : `Friends (${friends.length})`}
@@ -201,85 +230,86 @@ export default function Home() {
           </Pressable>
         </View>
 
-        <View style={styles.tabs} accessibilityRole="tablist">
-          {(['now', 'date'] as const).map((t) => (
-            <Pressable
-              key={t}
-              onPress={() => setTab(t)}
-              style={[styles.tab, tab === t && styles.tabOn]}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: tab === t }}>
-              <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{t === 'now' ? 'Beacons' : 'Find a date'}</Text>
+        {/* No words around the lamp (decision 71). It sits alone in the middle when there's nothing else. */}
+        <View style={[styles.hero, alone && !forked && styles.heroAlone]}>
+          {mine.length ? (
+            <Pressable onPress={tapLamp} accessibilityRole="button" accessibilityLabel="Make a plan" accessibilityState={{ expanded: forked }}>
+              <BeaconGlow flash={justLit} size={alone ? 170 : 140} />
             </Pressable>
-          ))}
+          ) : (
+            <UnlitLamp onPress={tapLamp} size={alone && !forked ? 170 : 140} nudge={!forked} />
+          )}
+          {hint && alone && !forked && <Text style={[styles.muted, styles.center]}>Tap the beacon</Text>}
+          {forked && (
+            <LampFork
+              name={myName}
+              onNow={() => {
+                setForked(false);
+                setComposing(true);
+              }}
+              onPlan={() => {
+                setForked(false);
+                router.push('/find-date');
+              }}
+            />
+          )}
         </View>
 
-        {tab === 'date' && <PollsHome userId={userId} />}
+        <View style={{ gap: 20 }}>
+          {/* Your plans: your beacons soonest first, each collapsed to one line (decision 51), then your Find a date asks. */}
+          {(mine.length > 0 || pollLists.plans.length > 0) && (
+            <View style={styles.group}>
+              <Label>Your plans</Label>
+              {mine.map((b) => (
+                <MyBeaconCard
+                  key={b.id}
+                  beacon={b}
+                  open={openId === b.id}
+                  onToggle={() => setOpenId(openId === b.id ? null : b.id)}
+                  onChange={() => {
+                    setReplacing(b);
+                    setComposing(true);
+                  }}
+                  onOut={load}
+                />
+              ))}
+              {pollLists.plans.map((p) => (
+                <PollRow key={p.id} poll={p} userId={userId} />
+              ))}
+            </View>
+          )}
 
-        {tab === 'now' && (
-          <View style={styles.hero}>
-            {mine.length ? (
-              <Pressable onPress={() => !composing && setComposing(true)} accessibilityRole="button" accessibilityLabel="Light another beacon">
-                <BeaconGlow flash={justLit} />
-              </Pressable>
-            ) : (
-              <UnlitLamp onPress={() => !composing && setComposing(true)} />
-            )}
-            {mine.length ? (
-              <Text style={[styles.muted, styles.center]}>Tap the beacon to add another.</Text>
-            ) : (
-              <>
-                <Text style={[styles.h1, styles.center]}>Free for something?</Text>
-                <Text style={[styles.muted, styles.center, { marginTop: -10 }]}>Tap the beacon to light it.</Text>
-              </>
-            )}
-          </View>
-        )}
+          {(waiting.length > 0 || pollLists.waiting.length > 0) && (
+            <View style={styles.group}>
+              <Label>Waiting on you</Label>
+              {waiting.map((b) => (
+                <IncomingBeacon
+                  key={b.id}
+                  beacon={b}
+                  meIn={isIn(b)}
+                  onDone={() => {
+                    setAnsweredNow((a) => [...a, b.id]);
+                    load();
+                  }}
+                  onDismiss={() => setAnsweredNow((a) => a.filter((x) => x !== b.id))}
+                  onHide={() =>
+                    setHidden((h) => {
+                      const next = [...h, b.id];
+                      saveHidden(next);
+                      return next;
+                    })
+                  }
+                />
+              ))}
+              {pollLists.waiting.map((p) => (
+                <PollRow key={p.id} poll={p} userId={userId} />
+              ))}
+            </View>
+          )}
 
-        {/* Your beacons, soonest first, each collapsed to one line with its status. Tap to open (decision 51). */}
-        {tab === 'now' && mine.length > 0 && (
-          <View style={styles.group}>
-            <Label>{mine.length > 1 ? `Your beacons · ${mine.length} out` : 'Your beacon'}</Label>
-            {mine.map((b) => (
-              <MyBeaconCard
-                key={b.id}
-                beacon={b}
-                open={openId === b.id}
-                onToggle={() => setOpenId(openId === b.id ? null : b.id)}
-                onChange={() => {
-                  setReplacing(b);
-                  setComposing(true);
-                }}
-                onOut={load}
-              />
-            ))}
-          </View>
-        )}
-
-        {tab === 'now' && waiting.length > 0 && (
-          <View style={styles.group}>
-            <Label>Waiting on you</Label>
-            {waiting.map((b) => (
-              <IncomingBeacon
-                key={b.id}
-                beacon={b}
-                meIn={isIn(b)}
-                onDone={() => {
-                  setAnsweredNow((a) => [...a, b.id]);
-                  load();
-                }}
-                onDismiss={() => setAnsweredNow((a) => a.filter((x) => x !== b.id))}
-                onHide={() =>
-                  setHidden((h) => {
-                    const next = [...h, b.id];
-                    saveHidden(next);
-                    return next;
-                  })
-                }
-              />
-            ))}
-          </View>
-        )}
+          {/* While the lamp is forked, everything else dims; a tap anywhere on it folds the fork back. */}
+          {forked && <Pressable style={styles.dim} onPress={() => setForked(false)} accessibilityLabel="Close" accessibilityRole="button" />}
+        </View>
       </ScrollView>
       </KeyboardAvoidingView>
 
@@ -291,11 +321,22 @@ export default function Home() {
           setComposing(false);
           setReplacing(null);
           setLightError('');
+          setReady(false);
         }}
         footer={
-          <View style={{ gap: 10 }}>
+          // Decision 70: no words on the button, just the lamp. The line above says what's missing, then what friends get.
+          <View style={{ gap: 6, alignItems: 'center' }}>
             <ErrorText>{lightError}</ErrorText>
-            <Button label={replacing ? 'Update my beacon' : 'Light my beacon'} onPress={() => composerRef.current?.light()} busy={lighting} />
+            <Text style={[styles.muted, styles.center]} numberOfLines={2}>
+              {ready ? (
+                <>
+                  Friends get: <Text style={styles.previewText}>&ldquo;{preview}&rdquo;</Text>
+                </>
+              ) : (
+                preview
+              )}
+            </Text>
+            <LampButton ready={ready} busy={lighting} onPress={() => composerRef.current?.light()} />
           </View>
         }>
         <Composer
@@ -306,6 +347,8 @@ export default function Home() {
           friends={friends}
           circles={circles}
           replacing={replacing}
+          myName={myName}
+          onState={onComposerState}
           onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
           onScrollTo={(y) => scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true })}
           onLit={async () => {
@@ -326,6 +369,7 @@ export default function Home() {
 type ComposerHandle = { light: () => void };
 
 // The light form. Its button lives in the sheet's pinned footer, which calls light() through the ref.
+// Nothing is picked to start with (decision 70): What, When and Who are chosen every time.
 function Composer({
   ref,
   setBusy,
@@ -334,6 +378,8 @@ function Composer({
   friends,
   circles,
   replacing,
+  myName,
+  onState,
   onLit,
   onNoteFocus,
   onScrollTo,
@@ -345,33 +391,43 @@ function Composer({
   friends: Friend[];
   circles: Circle[];
   replacing: MyBeacon | null;
+  myName: string;
+  onState: (ready: boolean, preview: string) => void;
   onLit: () => void;
   onNoteFocus?: () => void;
   onScrollTo?: (y: number) => void;
 }) {
   const days = useMemo(() => upcomingDays(), []);
-  const [day, setDay] = useState(() => {
-    if (!replacing) return 0;
+  // Changing a beacon starts from that beacon; a new one starts empty.
+  const [day, setDay] = useState<number | null>(() => {
+    if (!replacing) return null;
     const diff = Math.round((new Date(replacing.start_time).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
     return Math.min(6, Math.max(0, diff));
   });
-  const presets = useMemo(() => presetWindows(day), [day]);
-  const slots = useMemo(() => halfHourSlots(day), [day]);
-  const [acts, setActs] = useState<string[]>(replacing?.activities ?? ['Drinks']);
-  const [windowId, setWindowId] = useState(presets[0]?.id ?? 'custom');
-  const [customStart, setCustomStart] = useState<Date | null>(slots[0] ?? null);
-  const [customEnd, setCustomEnd] = useState<Date | null>(slots[3] ?? slots[slots.length - 1] ?? null);
+  const presets = useMemo(() => (day === null ? [] : presetWindows(day)), [day]);
+  const slots = useMemo(() => (day === null ? [] : halfHourSlots(day)), [day]);
+  const [acts, setActs] = useState<string[]>(replacing?.activities ?? []);
+  const [windowId, setWindowId] = useState<string | null>(() => {
+    if (!replacing) return null;
+    const s0 = new Date(replacing.start_time).getTime();
+    const e0 = new Date(replacing.end_time).getTime();
+    const d = Math.round((new Date(replacing.start_time).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
+    return presetWindows(Math.min(6, Math.max(0, d))).find((w) => w.start.getTime() === s0 && w.end.getTime() === e0)?.id ?? null;
+  });
+  const [customStart, setCustomStart] = useState<Date | null>(null);
+  const [customEnd, setCustomEnd] = useState<Date | null>(null);
 
-  // Changing day: pick its first window and reset the custom times.
+  // Changing day clears the time, so nothing is picked for you.
   const pickDay = (d: number) => {
+    if (d === day) return;
     setDay(d);
-    const p = presetWindows(d);
-    const sl = halfHourSlots(d);
-    setWindowId(d === 0 ? (p[0]?.id ?? 'custom') : (p.find((w) => w.id === 'tonight')?.id ?? p[0]?.id ?? 'custom'));
-    setCustomStart(sl[0] ?? null);
-    setCustomEnd(sl[3] ?? sl[sl.length - 1] ?? null);
+    setWindowId(null);
+    setCustomStart(null);
+    setCustomEnd(null);
   };
-  const [audience, setAudience] = useState<string[]>(['everyone']);
+  const [audience, setAudience] = useState<string[]>(() =>
+    !replacing ? [] : (replacing as MyBeacon & { audience_all?: boolean }).audience_all ? ['everyone'] : ((replacing as MyBeacon & { audience_circle_ids?: string[] }).audience_circle_ids ?? [])
+  );
   const [note, setNote] = useState(replacing?.note ?? '');
   const whereY = useRef(0);
   // Changing a beacon keeps its places (names from this session's cache).
@@ -381,12 +437,35 @@ function Composer({
       .map((p) => ({ placeId: p.place_id ?? undefined, label: p.label ?? undefined, name: placeName(p), area: p.place_id ? cachedPlace(p.place_id)?.area : undefined, starred: p.starred }))
   );
 
+  // Recents (decision 69): what you picked on your last few beacons, shown first with a clock.
+  const [history, setHistory] = useState<string[][]>([]);
   useEffect(() => {
-    loadAudience().then((a) => {
-      const valid = a.filter((x) => x === 'everyone' || circles.some((c) => c.id === x));
-      setAudience(valid.length ? valid : ['everyone']);
-    });
-  }, [circles]);
+    if (!userId) return;
+    supabase
+      .from('beacons')
+      .select('activities')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+      .then(({ data }) => setHistory((data ?? []).map((r: { activities: string[] }) => r.activities ?? [])));
+  }, [userId]);
+  const options = useMemo(() => {
+    const base = activityOptions(history, ACTIVITIES);
+    // Anything typed this time (or on the beacon being changed) that isn't in the row yet goes first.
+    const extra = acts.filter((a) => !base.some((o) => o.label.toLowerCase() === a.toLowerCase())).map((label) => ({ label, recent: false }));
+    return [...extra, ...base];
+  }, [history, acts]);
+
+  // "+ Your own": a small box in place of the chip, 20 characters (decision 69).
+  const [typing, setTyping] = useState(false);
+  const [own, setOwn] = useState('');
+  const addOwn = () => {
+    const v = cleanActivity(own);
+    setTyping(false);
+    setOwn('');
+    if (!v) return;
+    setActs((p) => [...p.filter((x) => x !== 'Anything' && x.toLowerCase() !== v.toLowerCase()), v]);
+  };
 
   const toggleAct = (a: string) => {
     if (a === 'Anything') return setActs((p) => (p.includes('Anything') ? [] : ['Anything']));
@@ -397,11 +476,10 @@ function Composer({
   };
 
   const toggleAudience = (id: string) => {
-    if (id === 'everyone') return setAudience(['everyone']);
+    if (id === 'everyone') return setAudience((p) => (p.includes('everyone') ? [] : ['everyone']));
     setAudience((p) => {
       const base = p.filter((x) => x !== 'everyone');
-      const next = base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
-      return next.length ? next : ['everyone'];
+      return base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
     });
   };
 
@@ -410,11 +488,21 @@ function Composer({
     : new Set(circles.filter((c) => audience.includes(c.id)).flatMap((c) => c.member_ids)).size;
 
   const chosen = windowId === 'custom' ? { start: customStart, end: customEnd } : presets.find((p) => p.id === windowId);
+  const hasWhen = !!chosen?.start && !!chosen?.end && chosen.end > chosen.start;
+
+  // Tell the footer whether the lamp can light, and what to say above it.
+  const missing = [!acts.length && 'what', !hasWhen && 'when', !audience.length && 'who'].filter(Boolean) as string[];
+  const ready = !missing.length;
+  const preview = ready && chosen?.start && chosen?.end
+    ? beaconPreview(myName || 'You', acts, chosen.start, chosen.end)
+    : `Pick ${missing.length > 1 ? `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}` : missing[0]}.`;
+  useEffect(() => {
+    onState(ready, preview);
+  }, [ready, preview, onState]);
 
   async function light() {
     setError('');
-    if (!acts.length) return setError('Pick at least one thing you are up for.');
-    if (!chosen?.start || !chosen?.end || chosen.end <= chosen.start) return setError('The end time needs to be after the start time.');
+    if (!ready || !chosen?.start || !chosen?.end) return setError(`Pick ${missing.join(', ')} first.`);
     if (!friends.length) return setError('Add a friend first. Tap Friends at the top.');
     if (!recipientCount) return setError('Nobody is in that circle yet. Add friends to it in Friends.');
 
@@ -434,7 +522,6 @@ function Composer({
     });
     setBusy(false);
     if (error) return setError(error.message);
-    saveAudience(audience);
     onLit();
   }
 
@@ -447,9 +534,37 @@ function Composer({
       <View style={styles.group}>
         <Label>What are you up for</Label>
         <Chips>
-          {ACTIVITIES.map((a) => (
-            <Chip key={a} label={a} on={acts.includes(a)} onPress={() => toggleAct(a)} />
+          {options.map((o) => (
+            <Chip
+              key={o.label}
+              label={o.label}
+              on={acts.includes(o.label)}
+              onPress={() => toggleAct(o.label)}
+              icon={o.recent ? <Ionicons name="time-outline" size={14} color={colors.muted} accessibilityLabel="Recent" /> : undefined}
+            />
           ))}
+          {typing ? (
+            <View style={styles.ownBox}>
+              <TextInput
+                value={own}
+                onChangeText={setOwn}
+                autoFocus
+                maxLength={20}
+                returnKeyType="done"
+                onSubmitEditing={addOwn}
+                onBlur={addOwn}
+                placeholder="e.g. Padel, a walk"
+                placeholderTextColor={colors.muted}
+                style={styles.ownInput}
+                accessibilityLabel="Your own activity"
+              />
+              <Pressable onPress={addOwn} style={styles.ownAdd} accessibilityRole="button">
+                <Text style={styles.ownAddText}>Add</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Chip label="+ Your own" dashed onPress={() => setTyping(true)} />
+          )}
         </Chips>
       </View>
 
@@ -468,13 +583,16 @@ function Composer({
             </Pressable>
           ))}
         </ScrollView>
-        <Chips>
-          {presets.map((p) => (
-            <Chip key={p.id} label={p.label} sub={fmtRange(p.start, p.end)} on={windowId === p.id} onPress={() => setWindowId(p.id)} />
-          ))}
-          <Chip label="Pick times" on={windowId === 'custom'} onPress={() => setWindowId('custom')} />
-        </Chips>
-        {windowId === 'custom' && (
+        {/* A day first, then its times. */}
+        {day !== null && (
+          <Chips>
+            {presets.map((p) => (
+              <Chip key={p.id} label={p.label} sub={fmtRange(p.start, p.end)} on={windowId === p.id} onPress={() => setWindowId(p.id)} />
+            ))}
+            <Chip label="Pick times" on={windowId === 'custom'} onPress={() => setWindowId('custom')} />
+          </Chips>
+        )}
+        {day !== null && windowId === 'custom' && (
           <View style={{ gap: 8 }}>
             <Text style={styles.muted}>From</Text>
             <SlotRow slots={slots} value={customStart} onChange={setCustomStart} />
@@ -490,9 +608,7 @@ function Composer({
       </View>
 
       <View style={styles.group}>
-        <Label>
-          Who · {recipientCount} {recipientCount === 1 ? 'friend' : 'friends'}
-        </Label>
+        <Label>{audience.length ? `Who · ${recipientCount} ${recipientCount === 1 ? 'friend' : 'friends'}` : 'Who'}</Label>
         <Chips>
           <Chip label="Everyone" on={audience.includes('everyone')} onPress={() => toggleAudience('everyone')} />
           {circles.map((c) => (
@@ -651,19 +767,19 @@ const styles = StyleSheet.create({
   dot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.accent, borderWidth: 2, borderColor: colors.ink },
   dotOff: { backgroundColor: colors.card },
   litFlag: { marginLeft: 6, backgroundColor: colors.butter, ...border, borderRadius: 3, ...shadow.select, paddingVertical: 1, paddingHorizontal: 8 },
-  litFlagNone: { backgroundColor: 'transparent', borderColor: colors.muted, boxShadow: 'none' },
   litFlagText: { fontSize: 13, fontWeight: '800' },
-  tabs: { flexDirection: 'row', backgroundColor: colors.card, ...border, overflow: 'hidden' },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  tabOn: { backgroundColor: colors.ink },
-  tabText: { fontSize: 14, fontWeight: '600' },
-  tabTextOn: { color: colors.bg, fontWeight: '800' },
   link: { color: colors.muted, fontSize: 15, fontWeight: '600' },
-  lane: { fontSize: 11, fontWeight: '800', color: colors.muted, borderWidth: 1.5, borderColor: colors.muted, borderStyle: 'dashed', paddingHorizontal: 5, marginLeft: 'auto', marginRight: 10 },
   h1: { fontSize: 32, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8 },
   h2: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
   center: { textAlign: 'center' },
   hero: { gap: 14, paddingTop: 4, alignItems: 'center' },
+  heroAlone: { flex: 1, justifyContent: 'center', paddingBottom: 60 },
+  dim: { position: 'absolute', top: -10, left: -22, right: -22, bottom: -48, backgroundColor: colors.bg, opacity: 0.85 },
+  previewText: { color: colors.ink, fontWeight: '800' },
+  ownBox: { flexDirection: 'row', gap: 8, width: '100%' },
+  ownInput: { flex: 1, paddingVertical: 8 },
+  ownAdd: { backgroundColor: colors.ink, ...border, paddingHorizontal: 14, justifyContent: 'center' },
+  ownAddText: { color: colors.bg, fontWeight: '800', fontSize: 15 },
   dayChip: { backgroundColor: colors.card, ...border, paddingVertical: 6, paddingHorizontal: 12, alignItems: 'center' },
   dayChipOn: { backgroundColor: colors.butter, ...shadow.select },
   dayChipText: { fontSize: 15, fontWeight: '600' },
