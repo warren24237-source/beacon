@@ -25,7 +25,7 @@ Project docs (brief, decisions, roadmap, open questions) and the **current statu
 - `src/app/`: screens (Expo Router). `join` → `phone` (only if missing) → `index` (home) and `friends`, guarded in `_layout.tsx`.
 - `src/lib/`: Supabase client, auth context, shared UI.
 - `supabase/migrations/`: SQL, applied in order via the Supabase Management API (Claude holds a token per session) or the SQL Editor.
-- Updates: `eas update --channel production --environment production --platform all`, with Warren's OK (decision 68: one lane, no preview). Native changes need `eas build --profile production` for Android and iOS, then submit to Play internal testing and TestFlight, then republish the latest update to `production`.
+- Updates: `eas update --channel production --environment production --platform android`, then the same with `--platform ios` (`all` fails: it also exports web, which crashes on AsyncStorage), with Warren's OK (decision 68: one lane, no preview). Native changes need `eas build --profile production` for Android and iOS, then submit to Play internal testing and TestFlight, then republish the latest update to `production`.
 
 ## Working rules
 - Warren can't install desktop software. Builds go through EAS in the cloud.
