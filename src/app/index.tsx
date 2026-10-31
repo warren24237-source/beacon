@@ -360,20 +360,11 @@ export default function Home() {
           )}
 
           {/* Past plans (31 Oct): ended plans you were part of, with Do this again.
-              With nothing on, it's a quiet link at the foot so the lamp still sits alone. */}
+              Always a quiet link at the foot (Warren: the button was intrusive). */}
           <View style={styles.pastWrap}>
-            {alone ? (
-              <Pressable onPress={() => router.push('/past' as never)} hitSlop={10} accessibilityRole="button">
-                <Text style={styles.actLink}>Past plans</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={() => router.push('/past' as never)}
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.pastButton, pressed && { boxShadow: 'none', transform: [{ translateX: 3 }, { translateY: 3 }] }]}>
-                <Text style={styles.pastText}>Past plans</Text>
-              </Pressable>
-            )}
+            <Pressable onPress={() => router.push('/past' as never)} hitSlop={10} accessibilityRole="button">
+              <Text style={styles.actLink}>Past plans</Text>
+            </Pressable>
           </View>
         </View>
       </ScrollView>
@@ -1166,9 +1157,7 @@ const styles = StyleSheet.create({
   kind: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, color: colors.muted },
   ownerDot: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  pastWrap: { alignItems: 'center', paddingTop: 4 },
-  pastButton: { backgroundColor: colors.card, ...border, ...shadow.select, paddingVertical: 8, paddingHorizontal: 16 },
-  pastText: { fontSize: 15, fontWeight: '800' },
+  pastWrap: { alignItems: 'center', paddingTop: 12 },
   mineHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
   mineBody: { gap: 10, paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12, borderTopWidth: 1.5, borderTopColor: colors.ink },
   status: { borderWidth: 2, borderColor: colors.ink, paddingHorizontal: 8, paddingVertical: 2 },
