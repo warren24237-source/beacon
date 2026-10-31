@@ -10,6 +10,7 @@ import {
   ACTIVITIES,
   activityOptions,
   activityPhrase,
+  DAY_BLOCKS,
   dayStart,
   activityTitle,
   beaconPreview,
@@ -69,12 +70,11 @@ function openFromTap(res: Notifications.NotificationResponse, openBeacon: (id: s
 
 
 // Find a day's time of day (one sheet, 31 Oct). Minutes after midnight; null = any time.
-type FadTimeId = 'any' | 'morning' | 'afternoon' | 'evening' | 'custom';
+type FadTimeId = 'any' | 'custom' | (typeof DAY_BLOCKS)[number]['id'];
+// Any time, then the same six blocks a beacon uses (31 Oct).
 const FAD_TIMES: { id: Exclude<FadTimeId, 'custom'>; label: string; sub?: string; start: number | null; end: number | null }[] = [
   { id: 'any', label: 'Any time', start: null, end: null },
-  { id: 'morning', label: 'Morning', sub: '9am to 12pm', start: 540, end: 720 },
-  { id: 'afternoon', label: 'Afternoon', sub: '12pm to 5pm', start: 720, end: 1020 },
-  { id: 'evening', label: 'Evening', sub: '6pm to 11pm', start: 1080, end: 1380 },
+  ...DAY_BLOCKS.map((b) => ({ id: b.id, label: b.label, sub: `${fmtMinutes(b.start)} to ${b.end >= 1440 ? 'midnight' : fmtMinutes(b.end)}`, start: b.start, end: Math.min(b.end, 1439) })),
 ];
 function fadWindowOf(id: FadTimeId, from: number, to: number): { label: string; start: number | null; end: number | null } {
   if (id === 'custom') return { label: `${fmtMinutes(from)} to ${fmtMinutes(to)}`, start: from, end: to };
@@ -479,7 +479,7 @@ function Composer({
     const s0 = new Date(replacing.start_time).getTime();
     const e0 = new Date(replacing.end_time).getTime();
     const d = Math.round((new Date(replacing.start_time).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
-    return presetWindows(Math.min(6, Math.max(0, d))).find((w) => w.start.getTime() === s0 && w.end.getTime() === e0)?.id ?? null;
+    return presetWindows(Math.max(0, d)).find((w) => w.start.getTime() === s0 && w.end.getTime() === e0)?.id ?? null;
   });
   const [customStart, setCustomStart] = useState<Date | null>(null);
   const [customEnd, setCustomEnd] = useState<Date | null>(null);
@@ -720,6 +720,23 @@ function Composer({
             <Text style={styles.dayChipText}>{!fad && day !== null && day > 6 ? shortDate(dayStart(day)) : 'Pick a date'}</Text>
             <Text style={styles.dayChipSub}>up to 3 months</Text>
           </Pressable>
+          {/* Find a day sits with the days, never under the times (Warren, 31 Oct). */}
+          {!replacing && (
+            <Pressable
+              onPress={() => {
+                setPicking(false);
+                setFad((x) => !x);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: fad }}
+              style={[styles.dayChip, styles.fadChip, fad && styles.dayChipOn]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <TickMark />
+                <Text style={styles.dayChipText}>Find a day</Text>
+              </View>
+              <Text style={styles.dayChipSub}>friends pick</Text>
+            </Pressable>
+          )}
         </View>
         {picking && !fad && (
           <Calendar
@@ -739,7 +756,13 @@ function Composer({
             <Text style={styles.boxTitle}>What time {day === 0 ? 'today' : day === 1 ? 'tomorrow' : `on ${shortDate(dayStart(day))}`}?</Text>
             <Chips>
               {presets.map((p) => (
-                <Chip key={p.id} label={p.label} sub={fmtRange(p.start, p.end)} on={windowId === p.id} onPress={() => setWindowId(p.id)} />
+                <Chip
+                  key={p.id}
+                  label={p.label}
+                  sub={p.id === 'now' ? `now till ${fmtRange(p.end, p.end).split(' to ')[1]}` : fmtRange(p.start, p.end)}
+                  on={windowId === p.id}
+                  onPress={() => setWindowId(p.id)}
+                />
               ))}
               <Chip label="Pick times" on={windowId === 'custom'} onPress={() => setWindowId('custom')} />
             </Chips>
@@ -752,24 +775,6 @@ function Composer({
               </View>
             )}
           </View>
-        )}
-
-        {!replacing && (
-          <>
-            {!fad && <Text style={styles.muted}>Not sure which day?</Text>}
-            <Pressable
-              onPress={() => {
-                setPicking(false);
-                setFad((x) => !x);
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: fad }}
-              style={[styles.fadChip, fad && styles.dayChipOn]}>
-              <TickMark />
-              <Text style={styles.dayChipText}>Find a day</Text>
-              <Text style={styles.dayChipSub}>· friends tick what suits</Text>
-            </Pressable>
-          </>
         )}
 
         {fad && (
@@ -1149,7 +1154,7 @@ const styles = StyleSheet.create({
   ownAddText: { color: colors.bg, fontWeight: '800', fontSize: 15 },
   dayChip: { backgroundColor: colors.card, ...border, paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center', minWidth: 62 },
   dayWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  fadChip: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: colors.bg, ...border, borderStyle: 'dashed', paddingVertical: 8, paddingHorizontal: 12 },
+  fadChip: { borderStyle: 'dashed', backgroundColor: colors.bg },
   box: { backgroundColor: colors.card, ...border, padding: 12, gap: 10 },
   boxTitle: { fontSize: 16, fontWeight: '800' },
   dayChipOn: { backgroundColor: colors.butter, ...shadow.select },

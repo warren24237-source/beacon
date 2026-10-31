@@ -39,22 +39,29 @@ describe('whenLabel', () => {
 });
 
 describe('time windows', () => {
-  it('today: next 2 hours plus only windows that have not finished', () => {
-    const ids = presetWindows(0, now).map((w) => w.id);
-    expect(ids).toEqual(['now', 'early', 'tonight']); // lunch has gone, afternoon has under an hour left
+  it('today at 4:10pm: next 2 hours, then blocks from the next half hour', () => {
+    const w = presetWindows(0, now);
+    expect(w.map((x) => x.id)).toEqual(['now', 'late-afternoon', 'early-evening', 'late-evening']);
+    expect(fmtTime(w[1].start)).toBe('4:30pm'); // never 4:10pm
+    expect(fmtTime(w[0].end)).toBe('6:30pm'); // 2 hours on, rounded up to the half hour
   });
-  it('today: hides a window with under an hour left', () => {
-    const ids = presetWindows(0, on(26, 16, 55)).map((w) => w.id);
-    expect(ids).toEqual(['now', 'early', 'tonight']); // afternoon would only be 4:55pm to 5pm
+  it('today: a block under way needs an hour left', () => {
+    expect(presetWindows(0, on(26, 17, 5)).map((x) => x.id)).toEqual(['now', 'early-evening', 'late-evening']); // late afternoon would be 5:30 to 6pm
+    expect(fmtTime(presetWindows(0, on(26, 13, 54))[1].start)).toBe('2pm');
   });
-  it('another day: morning to evening, never "Tonight"', () => {
-    expect(presetWindows(5, now).map((w) => w.label)).toEqual(['Morning', 'Lunch', 'Afternoon', 'Early evening', 'Evening']);
-    expect(presetWindows(1, now).map((w) => w.label)).not.toContain('Tonight');
+  it('late evening runs to midnight', () => {
+    const w = presetWindows(3, now).at(-1)!;
+    expect(fmtRange(w.start, w.end)).toBe('9pm to midnight');
   });
-  it('custom times start at 7am on other days and stop before midnight', () => {
+  it('another day: the six standard blocks', () => {
+    expect(presetWindows(5, now).map((w) => w.label)).toEqual(['Early morning', 'Mid morning', 'Early afternoon', 'Late afternoon', 'Early evening', 'Late evening']);
+  });
+  it('pick times: half hours from the next half hour today, 6am other days, before midnight', () => {
+    expect(fmtTime(halfHourSlots(0, on(26, 13, 54))[0])).toBe('2pm');
+    expect(fmtTime(halfHourSlots(0, on(26, 13, 10))[0])).toBe('1:30pm');
     const s = halfHourSlots(2, now);
-    expect(fmtTime(s[0])).toBe('7am');
-    expect(s.every((d) => d.getDate() === 28)).toBe(true);
+    expect(fmtTime(s[0])).toBe('6am');
+    expect(s.every((d) => d.getDate() === 28 && d.getMinutes() % 30 === 0)).toBe(true);
   });
 });
 
@@ -63,6 +70,9 @@ describe('wording', () => {
     expect(activityPhrase(['Coffee'])).toBe('coffee');
     expect(activityPhrase(['Coffee', 'Drinks', 'Food'])).toBe('coffee, drinks or food');
     expect(activityPhrase(['Anything'])).toBe('anything');
+  });
+  it('a beacon starting now says "now till", never the current minute', () => {
+    expect(beaconPreview('Warren', ['Drinks'], on(26, 16, 10), on(26, 18, 30), now)).toBe("Warren's up for drinks, now till 6:30pm");
   });
   it('previews the notification like the server words it', () => {
     expect(beaconPreview('Warren', ['Padel'], on(27, 19), on(27, 23), now)).toBe("Warren's up for padel, tomorrow, 7pm to 11pm");

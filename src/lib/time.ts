@@ -9,7 +9,8 @@ export function fmtTime(d: Date): string {
   h = h % 12 || 12;
   return m ? `${h}:${String(m).padStart(2, '0')}${ap}` : `${h}${ap}`;
 }
-export const fmtRange = (a: Date, b: Date) => `${fmtTime(a)} to ${fmtTime(b)}`;
+/** "9pm to 11pm"; a plan that runs to the end of the day says "to midnight", not "to 12am". */
+export const fmtRange = (a: Date, b: Date) => `${fmtTime(a)} to ${b.getHours() === 0 && b.getMinutes() === 0 ? 'midnight' : fmtTime(b)}`;
 
 /** Midnight at the start of the day `offset` days from today. */
 export function dayStart(offset: number, now = new Date()): Date {
@@ -52,33 +53,53 @@ export function whenLabel(start: Date, end: Date, now = new Date()): { text: str
   return { text: `${dayLabel(start, now)} · ${fmtRange(start, end)}`, live: false };
 }
 
-/** Quick windows for a day. Today: only ones with at least an hour left, plus "Next 2 hours". */
+/** The next :00 or :30 at or after `d` (13:54 -> 14:00, 13:10 -> 13:30, 14:00 -> 14:00). */
+export function nextHalfHour(d: Date): Date {
+  const x = new Date(d);
+  x.setSeconds(0, 0);
+  const m = x.getMinutes();
+  if (m === 0 || m === 30) return x;
+  x.setMinutes(m < 30 ? 30 : 60);
+  return x;
+}
+
+/** The six standard blocks of a day (Warren, 31 Oct). Shared by beacons and Find a day. */
+export const DAY_BLOCKS = [
+  { id: 'early-morning', label: 'Early morning', start: 6 * 60, end: 9 * 60 },
+  { id: 'mid-morning', label: 'Mid morning', start: 9 * 60, end: 12 * 60 },
+  { id: 'early-afternoon', label: 'Early afternoon', start: 12 * 60, end: 15 * 60 },
+  { id: 'late-afternoon', label: 'Late afternoon', start: 15 * 60, end: 18 * 60 },
+  { id: 'early-evening', label: 'Early evening', start: 18 * 60, end: 21 * 60 },
+  { id: 'late-evening', label: 'Late evening', start: 21 * 60, end: 24 * 60 },
+] as const;
+
+/**
+ * Quick windows for a day: the six standard blocks. Today: "Next 2 hours" first, blocks that have
+ * passed drop off, and a block under way starts at the next half hour (never 1:54pm), as long as
+ * at least an hour of it is left.
+ */
 export function presetWindows(offset = 0, now = new Date()): Window[] {
   const day = dayStart(offset, now);
   const list: Window[] = [];
+  const from = nextHalfHour(now);
   if (offset === 0) {
-    const two = new Date(now.getTime() + 2 * 3600e3);
-    const endOfDay = at(day, 23, 59);
+    const endOfDay = at(day, 24);
+    const two = nextHalfHour(new Date(now.getTime() + 2 * 3600e3));
     list.push({ id: 'now', label: 'Next 2 hours', start: now, end: two > endOfDay ? endOfDay : two });
   }
-  // Skip windows with under an hour left (no "Afternoon 4:55pm to 5pm").
-  const add = (id: string, label: string, s: Date, e: Date) => {
-    if (e.getTime() - now.getTime() >= 3600e3) list.push({ id, label, start: s < now ? now : s, end: e });
-  };
-  if (offset > 0) add('morning', 'Morning', at(day, 9), at(day, 12));
-  add('lunch', 'Lunch', at(day, 12), at(day, 14));
-  add('afternoon', 'Afternoon', at(day, 14), at(day, 17));
-  add('early', 'Early evening', at(day, 17), at(day, 19));
-  add('tonight', offset === 0 ? 'Tonight' : 'Evening', at(day, 19), at(day, 23)); // "Tonight" only means today
+  for (const b of DAY_BLOCKS) {
+    let s = at(day, Math.floor(b.start / 60), b.start % 60);
+    const e = at(day, Math.floor(b.end / 60), b.end % 60);
+    if (offset === 0 && s < from) s = from;
+    if (e.getTime() - s.getTime() >= 3600e3) list.push({ id: b.id, label: b.label, start: s, end: e });
+  }
   return list;
 }
 
-/** Half-hour slots for "Pick times": from now (today) or 7am (other days) until 11:30pm. */
+/** Half-hour slots for "Pick times": from the next half hour (today) or 6am (other days) until 11:30pm. */
 export function halfHourSlots(offset = 0, now = new Date()): Date[] {
   const slots: Date[] = [];
-  const d = offset === 0 ? new Date(now) : at(dayStart(offset, now), 6, 30);
-  d.setSeconds(0, 0);
-  d.setMinutes(d.getMinutes() < 30 ? 30 : 60);
+  const d = offset === 0 ? nextHalfHour(now) : at(dayStart(offset, now), 6);
   while (d.getHours() !== 0 && slots.length < 40) {
     slots.push(new Date(d));
     d.setMinutes(d.getMinutes() + 30);
@@ -110,6 +131,8 @@ export function cleanActivity(s: string): string {
 /** The notification friends get, as close to the server's wording (light_beacon) as the phone can make it. */
 export function beaconPreview(name: string, acts: string[], start: Date, end: Date, now = new Date()): string {
   const diff = Math.round((dayStart(0, start).getTime() - dayStart(0, now).getTime()) / 864e5);
+  // Starting now: "now till 9:30pm", never the current minute (matches the server's when_phrase, migration 0025).
+  if (start.getTime() <= now.getTime() + 60e3) return `${name}'s up for ${activityPhrase(acts)}, now till ${fmtRange(end, end).split(' to ')[1]}`;
   const day = diff <= 0 ? '' : diff === 1 ? 'tomorrow, ' : `${DAY_NAMES[start.getDay()]} ${start.getDate()} ${MONTHS[start.getMonth()]}, `;
   return `${name}'s up for ${activityPhrase(acts)}, ${day}${fmtRange(start, end)}`;
 }
