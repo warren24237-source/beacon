@@ -51,7 +51,11 @@ export function ChatRow({ thread, title, info }: { thread: Thread; title: string
 /** A small coral "2 new" next to a plan's title when it's folded. */
 export function NewBadge({ info }: { info?: ThreadInfo }) {
   const n = newCount(info?.unread ?? 0);
-  return n ? <Text style={styles.badgeSmall}>{n}</Text> : null;
+  return n ? (
+    <Text style={styles.badgeSmall} numberOfLines={1}>
+      {n}
+    </Text>
+  ) : null;
 }
 
 /**
@@ -120,7 +124,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '800' },
   last: { fontSize: 13, color: colors.muted },
   badge: { fontSize: 12, fontWeight: '800', backgroundColor: colors.accent, borderWidth: 1.5, borderColor: colors.ink, paddingHorizontal: 7, paddingVertical: 1, overflow: 'hidden' },
-  badgeSmall: { fontSize: 11, fontWeight: '800', backgroundColor: colors.accent, borderWidth: 1.5, borderColor: colors.ink, borderRadius: 10, paddingHorizontal: 6, overflow: 'hidden' },
+  badgeSmall: { flexShrink: 0, fontSize: 11, fontWeight: '800', backgroundColor: colors.accent, borderWidth: 1.5, borderColor: colors.ink, borderRadius: 10, paddingHorizontal: 6, overflow: 'hidden' },
   person: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, paddingHorizontal: 10, backgroundColor: colors.card, ...border },
   personTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
   avatar: { width: 32, height: 32, backgroundColor: colors.card, ...border, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },

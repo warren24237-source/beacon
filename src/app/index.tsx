@@ -42,6 +42,7 @@ import { cachedPlace, type DraftPlace } from '@/lib/places';
 import { fetchChatOverview, type ThreadInfo } from '@/lib/chat';
 import { ChatRow, chatHref, NewBadge, PlanPerson } from '@/lib/chatui';
 import { takeTemplate, type PlanTemplate } from '@/lib/again';
+import { routeForBuzz, type BuzzData } from '@/lib/buzz';
 import { WhenTag } from '@/lib/when';
 import { supabase } from '@/lib/supabase';
 import { border, Button, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
@@ -51,17 +52,17 @@ const handledTaps = new Set<string>();
 // Not available in browsers (only used for screenshots there).
 const useLastTap = Platform.OS === 'web' ? () => null : Notifications.useLastNotificationResponse;
 
-// Tapping a notification: a Find a day opens it, a chat buzz opens that chat (once per notification).
-function openFromTap(res: Notifications.NotificationResponse) {
+function openFromTap(res: Notifications.NotificationResponse, openBeacon: (id: string) => void) {
   const key = res.notification.request.identifier;
-  const data = res.notification.request.content.data as { type?: string; poll_id?: string | null; beacon_id?: string | null } | undefined;
-  if (!data || handledTaps.has(key)) return;
-  if (data.type === 'chat' && (data.beacon_id || data.poll_id)) {
-    handledTaps.add(key);
-    router.push(chatHref({ beaconId: data.beacon_id, pollId: data.poll_id }, res.notification.request.content.title ?? 'Chat') as never);
-  } else if (data.type === 'poll' && data.poll_id) {
-    handledTaps.add(key);
-    router.push(`/poll/${data.poll_id}`);
+  if (handledTaps.has(key)) return;
+  const r = routeForBuzz(res.notification.request.content.data as BuzzData);
+  if (!r) return;
+  handledTaps.add(key);
+  if (r.chat) router.push(chatHref(r.chat, res.notification.request.content.title ?? 'Chat') as never);
+  else if (r.href) router.push(r.href as never);
+  else if (r.beacon) {
+    if (router.canDismiss()) router.dismissAll();
+    openBeacon(r.beacon);
   }
 }
 
@@ -177,7 +178,7 @@ export default function Home() {
   // Opened from a notification while the app was closed: go to it, once.
   const lastTap = useLastTap();
   useEffect(() => {
-    if (lastTap) openFromTap(lastTap);
+    if (lastTap) openFromTap(lastTap, setOpenId);
   }, [lastTap]);
 
   // Sign this phone up for notifications straight away, so friends' beacons reach it
@@ -192,7 +193,7 @@ export default function Home() {
     });
     const n = Notifications.addNotificationReceivedListener(() => load());
     const r = Notifications.addNotificationResponseReceivedListener((res) => {
-      openFromTap(res);
+      openFromTap(res, setOpenId);
       load();
     });
     return () => {
@@ -770,14 +771,12 @@ function FriendPlanCard({
           <Text style={styles.avatarText}>{name[0]}</Text>
         </View>
         <View style={{ flex: 1, gap: 4 }}>
+          <Text style={styles.mineTitle} numberOfLines={1}>
+            {name}&apos;s {activityTitle(beacon.activities).toLowerCase()}
+          </Text>
           <View style={styles.titleRow}>
-            <Text style={styles.mineTitle} numberOfLines={1}>
-              {name}&apos;s {activityTitle(beacon.activities).toLowerCase()}
-            </Text>
-            {!open && <NewBadge info={chat} />}
-          </View>
-          <View style={{ flexDirection: 'row' }}>
             <WhenTag text={when.text} live={when.live} />
+            {!open && <NewBadge info={chat} />}
           </View>
         </View>
         <View style={[styles.status, locked ? styles.statusLocked : styles.statusIn]}>
@@ -858,14 +857,12 @@ function MyBeaconCard({
         accessibilityLabel={`${activityTitle(beacon.activities)}, ${when.text}, ${locked ? 'locked in' : `${responders.length} in`}`}
         style={styles.mineHead}>
         <View style={{ flex: 1, gap: 4 }}>
+          <Text style={styles.mineTitle} numberOfLines={1}>
+            {activityTitle(beacon.activities)}
+          </Text>
           <View style={styles.titleRow}>
-            <Text style={styles.mineTitle} numberOfLines={1}>
-              {activityTitle(beacon.activities)}
-            </Text>
-            {!open && <NewBadge info={chat} />}
-          </View>
-          <View style={{ flexDirection: 'row' }}>
             <WhenTag text={when.text} live={when.live} />
+            {!open && <NewBadge info={chat} />}
           </View>
         </View>
         <View style={[styles.status, locked ? styles.statusLocked : responders.length ? styles.statusIn : styles.statusNone]}>
@@ -1002,7 +999,7 @@ const styles = StyleSheet.create({
   mine: { backgroundColor: colors.cream, ...border, ...shadow.card },
   theirs: { backgroundColor: colors.card, ...border, ...shadow.card },
   ownerDot: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   pastWrap: { alignItems: 'center', paddingTop: 4 },
   pastButton: { backgroundColor: colors.card, ...border, ...shadow.select, paddingVertical: 8, paddingHorizontal: 16 },
   pastText: { fontSize: 15, fontWeight: '800' },
