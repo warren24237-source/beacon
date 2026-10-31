@@ -245,11 +245,17 @@ export default function Home() {
             <View style={[styles.dot, !mine.length && styles.dotOff]} />
             <Text style={styles.wordmarkText}>Beacon</Text>
           </View>
-          <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
-            <Text style={[styles.link, requestCount > 0 && { color: colors.ink, fontWeight: '800' }]}>
-              {requestCount > 0 ? `Friends · ${requestCount} new` : `Friends (${friends.length})`}
-            </Text>
-          </Pressable>
+          <View style={styles.topRight}>
+            {/* Past plans: a small clock in the top bar, so home stays just the lamp and your plans (Warren, 31 Oct). */}
+            <Pressable onPress={() => router.push('/past' as never)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Past plans">
+              <Ionicons name="time-outline" size={22} color={colors.muted} />
+            </Pressable>
+            <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
+              <Text style={[styles.link, requestCount > 0 && { color: colors.ink, fontWeight: '800' }]}>
+                {requestCount > 0 ? `Friends · ${requestCount} new` : `Friends (${friends.length})`}
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* No words around the lamp (decision 71, Warren again 31 Oct: no "Tap the beacon" either).
@@ -359,13 +365,6 @@ export default function Home() {
             </View>
           )}
 
-          {/* Past plans (31 Oct): ended plans you were part of, with Do this again.
-              Always a quiet link at the foot (Warren: the button was intrusive). */}
-          <View style={styles.pastWrap}>
-            <Pressable onPress={() => router.push('/past' as never)} hitSlop={10} accessibilityRole="button">
-              <Text style={styles.actLink}>Past plans</Text>
-            </Pressable>
-          </View>
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
@@ -1157,7 +1156,7 @@ const styles = StyleSheet.create({
   kind: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, color: colors.muted },
   ownerDot: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  pastWrap: { alignItems: 'center', paddingTop: 12 },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   mineHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
   mineBody: { gap: 10, paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12, borderTopWidth: 1.5, borderTopColor: colors.ink },
   status: { borderWidth: 2, borderColor: colors.ink, paddingHorizontal: 8, paddingVertical: 2 },
