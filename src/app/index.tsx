@@ -247,8 +247,13 @@ export default function Home() {
           </View>
           <View style={styles.topRight}>
             {/* Past plans: a small clock in the top bar, so home stays just the lamp and your plans (Warren, 31 Oct). */}
-            <Pressable onPress={() => router.push('/past' as never)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Past plans">
-              <Ionicons name="time-outline" size={22} color={colors.muted} />
+            <Pressable
+              onPress={() => router.push('/past' as never)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Past plans"
+              style={({ pressed }) => [styles.pastIcon, pressed && { boxShadow: 'none', transform: [{ translateX: 2 }, { translateY: 2 }] }]}>
+              <Ionicons name="time-outline" size={20} color={colors.ink} />
             </Pressable>
             <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
               <Text style={[styles.link, requestCount > 0 && { color: colors.ink, fontWeight: '800' }]}>
@@ -1156,7 +1161,8 @@ const styles = StyleSheet.create({
   kind: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, color: colors.muted },
   ownerDot: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  topRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  pastIcon: { width: 36, height: 36, backgroundColor: colors.card, ...border, boxShadow: `2px 2px 0px ${colors.ink}`, alignItems: 'center', justifyContent: 'center' },
   mineHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
   mineBody: { gap: 10, paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12, borderTopWidth: 1.5, borderTopColor: colors.ink },
   status: { borderWidth: 2, borderColor: colors.ink, paddingHorizontal: 8, paddingVertical: 2 },
