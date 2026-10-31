@@ -1,40 +1,48 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { tally, todayYmd, type Poll } from './polls';
+import type { ThreadInfo } from './chat';
+import { NewBadge } from './chatui';
+import { fmtDay, pollLive, tally, type Poll } from './polls';
 import { border, colors, shadow, Text } from './ui';
 
-// Find a date asks on home (decision 69). They sit in the same lists as beacons, with a small tag.
-// Yours and ones you've answered go under "Your plans"; ones you haven't answered under "Waiting on you".
+// Find a day asks on home (decision 69). Yours go under "Your plans", ones you've answered under "You're in",
+// ones you haven't answered under "Waiting on you" (31 Oct).
 
 export function splitPolls(all: Poll[], userId: string) {
-  // Once every date has passed, an ask leaves home.
-  const today = todayYmd();
-  const polls = all.filter((p) => p.dates.some((d) => d >= today));
+  // Once its locked day (or every date) has passed, an ask moves to Past plans.
+  const polls = all.filter((p) => pollLive(p));
   const answered = (p: Poll) => !!p.poll_invitees.find((i) => i.user_id === userId)?.answered_at;
   return {
-    plans: polls.filter((p) => p.owner_id === userId || answered(p)),
+    plans: polls.filter((p) => p.owner_id === userId),
+    joined: polls.filter((p) => p.owner_id !== userId && answered(p)),
     waiting: polls.filter((p) => p.owner_id !== userId && !answered(p)),
   };
 }
 
-export function PollRow({ poll, userId }: { poll: Poll; userId: string }) {
+export function PollRow({ poll, userId, chat }: { poll: Poll; userId: string; chat?: ThreadInfo }) {
   const own = poll.owner_id === userId;
   const t = tally(poll);
   const from = poll.owner?.full_name ?? 'A friend';
   const waiting = !own && !poll.poll_invitees.find((i) => i.user_id === userId)?.answered_at;
-  const sub = own ? `${t.answered} of ${t.total} answered` : waiting ? `From ${from} · tap to answer` : `From ${from} · you answered`;
+  const locked = poll.locked_day ? `${fmtDay(poll.locked_day)} · ${poll.time_label}` : null;
+  const sub = locked
+    ? own ? `Locked in: ${locked}` : `From ${from} · ${locked}`
+    : own ? `${t.answered} of ${t.total} answered` : waiting ? `From ${from} · tap to answer` : `From ${from} · you answered`;
   return (
     <Pressable
       onPress={() => router.push(`/poll/${poll.id}`)}
       style={({ pressed }) => [styles.item, waiting && styles.waiting, pressed && { transform: [{ translateX: 3 }, { translateY: 3 }], boxShadow: 'none' }]}
       accessibilityRole="button"
-      accessibilityLabel={`Find a date: ${poll.title}. ${sub}`}>
+      accessibilityLabel={`Find a day: ${poll.title}. ${sub}`}>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.kind}>FIND A DATE</Text>
-        <Text style={styles.title} numberOfLines={1}>
-          {poll.title}
-        </Text>
+        <Text style={styles.kind}>{poll.locked_day ? 'FIND A DAY · LOCKED IN' : 'FIND A DAY'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={[styles.title, { flexShrink: 1 }]} numberOfLines={1}>
+            {poll.title}
+          </Text>
+          <NewBadge info={chat} />
+        </View>
         <Text style={[styles.sub, waiting && { color: colors.ink, fontWeight: '800' }]}>{sub}</Text>
       </View>
       <Text style={styles.chev}>›</Text>

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { fetchCircles, fetchFriends, type Circle, type Friend } from '@/lib/beacon';
@@ -9,7 +9,7 @@ import { Calendar } from '@/lib/calendar';
 import { DAY_SLOTS, fmtDay, fmtMinutes, parseYmd, TIME_OPTIONS, todayYmd, weeklyDates, ymd } from '@/lib/polls';
 import { enableMatchAlerts } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
-import { Button, Chip, Chips, colors, ErrorText, Field, Label, ScrollScreen, Text } from '@/lib/ui';
+import { BackBar, Button, Chip, Chips, colors, ErrorText, Field, Label, ScrollScreen, Text } from '@/lib/ui';
 
 const WEEK = [1, 2, 3, 4, 5, 6, 0];
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -122,12 +122,7 @@ export default function FindDate() {
 
   return (
     <ScrollScreen>
-      <View style={styles.top}>
-        <Text style={styles.h1}>Find a date</Text>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.link}>Cancel</Text>
-        </Pressable>
-      </View>
+      <BackBar title="Find a day" sub="Friends tick the dates that suit" />
 
       <View style={styles.group}>
         <Label>What&apos;s it for?</Label>

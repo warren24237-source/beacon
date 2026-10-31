@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -197,7 +199,47 @@ export function Button({
   );
 }
 
+/** Go back, or home if there's nowhere to go back to (opened from a notification). */
+export function goBack() {
+  if (router.canGoBack()) router.back();
+  else router.replace('/');
+}
+
+/**
+ * The top of every screen past home (31 Oct, tester feedback: "there isn't a back button"):
+ * a square back arrow, the title, an optional line under it and an optional link on the right.
+ */
+export function BackBar({ title, sub, onBack = goBack, right }: { title: string; sub?: string; onBack?: () => void; right?: ReactNode }) {
+  return (
+    <View style={styles.backBar}>
+      <Pressable
+        onPress={onBack}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        hitSlop={8}
+        style={({ pressed }) => [styles.backButton, pressed && pushed(2)]}>
+        <Ionicons name="chevron-back" size={22} color={colors.ink} />
+      </Pressable>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.backTitle} numberOfLines={2}>
+          {title}
+        </Text>
+        {sub ? (
+          <Text style={styles.backSub} numberOfLines={1}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
+      {right}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  backBar: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backButton: { width: 42, height: 42, backgroundColor: colors.card, ...border, boxShadow: `2px 2px 0px ${colors.ink}`, alignItems: 'center', justifyContent: 'center' },
+  backTitle: { fontSize: 24, lineHeight: 27, fontWeight: '800', letterSpacing: -0.5 },
+  backSub: { fontSize: 13, color: colors.muted },
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: 24, gap: 18, paddingBottom: 48 },
   inner: { flex: 1, padding: 24, gap: 16, justifyContent: 'center' },

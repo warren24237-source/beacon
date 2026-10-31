@@ -39,7 +39,9 @@ import { Sheet } from '@/lib/sheet';
 import { enableMatchAlerts } from '@/lib/push';
 import { PlaceRow, placeName, usePlaceNames, WherePicker } from '@/lib/placeui';
 import { cachedPlace, type DraftPlace } from '@/lib/places';
-import { ReplyIcons } from '@/lib/reply';
+import { fetchChatOverview, type ThreadInfo } from '@/lib/chat';
+import { ChatRow, chatHref, NewBadge, PlanPerson } from '@/lib/chatui';
+import { takeTemplate, type PlanTemplate } from '@/lib/again';
 import { WhenTag } from '@/lib/when';
 import { supabase } from '@/lib/supabase';
 import { border, Button, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
@@ -49,10 +51,15 @@ const handledTaps = new Set<string>();
 // Not available in browsers (only used for screenshots there).
 const useLastTap = Platform.OS === 'web' ? () => null : Notifications.useLastNotificationResponse;
 
-function openPollFrom(res: Notifications.NotificationResponse) {
+// Tapping a notification: a Find a day opens it, a chat buzz opens that chat (once per notification).
+function openFromTap(res: Notifications.NotificationResponse) {
   const key = res.notification.request.identifier;
-  const data = res.notification.request.content.data as { type?: string; poll_id?: string } | undefined;
-  if (data?.type === 'poll' && data.poll_id && !handledTaps.has(key)) {
+  const data = res.notification.request.content.data as { type?: string; poll_id?: string | null; beacon_id?: string | null } | undefined;
+  if (!data || handledTaps.has(key)) return;
+  if (data.type === 'chat' && (data.beacon_id || data.poll_id)) {
+    handledTaps.add(key);
+    router.push(chatHref({ beaconId: data.beacon_id, pollId: data.poll_id }, res.notification.request.content.title ?? 'Chat') as never);
+  } else if (data.type === 'poll' && data.poll_id) {
     handledTaps.add(key);
     router.push(`/poll/${data.poll_id}`);
   }
@@ -75,8 +82,11 @@ export default function Home() {
   const [requestCount, setRequestCount] = useState(0);
   const [composing, setComposing] = useState(false);
   const [justLit, setJustLit] = useState(false);
-  // Beacons answered while on home stay a moment so you can message them, then leave home (decision 44).
-  const [answeredNow, setAnsweredNow] = useState<string[]>([]);
+  // Hidden ones fold into a "1 hidden · Show" line at the bottom of Waiting on you (31 Oct).
+  const [showHidden, setShowHidden] = useState(false);
+  const [chat, setChat] = useState<Record<string, ThreadInfo>>({});
+  // "Do this again" from Past plans opens the light sheet filled in.
+  const [template, setTemplate] = useState<PlanTemplate | null>(null);
   const [polls, setPolls] = useState<Poll[]>([]);
   // The lamp forks into "Up for something" and "Find a day" (decision 69).
   const [forked, setForked] = useState(false);
@@ -103,14 +113,16 @@ export default function Home() {
     const run = (async () => {
       do {
         again.current = false;
-        const [m, inc, f, c, r, pl] = await Promise.all([
+        const [m, inc, f, c, r, pl, ch] = await Promise.all([
           fetchMyBeacons(userId),
           fetchFriendsBeacons(userId),
           fetchFriends(),
           fetchCircles(),
           supabase.rpc('incoming_friend_requests'),
           fetchPolls(),
+          fetchChatOverview(),
         ]);
+        setChat(ch);
         setPolls(pl);
         setRequestCount((r.data ?? []).length);
         setMine(m);
@@ -131,10 +143,13 @@ export default function Home() {
     useCallback(() => {
       load();
       const t = setInterval(load, 15000);
-      return () => {
-        clearInterval(t);
-        setAnsweredNow([]);
-      };
+      const again = takeTemplate();
+      if (again) {
+        setTemplate(again);
+        setForked(false);
+        setComposing(true);
+      }
+      return () => clearInterval(t);
     }, [load])
   );
 
@@ -159,10 +174,10 @@ export default function Home() {
     }
   };
 
-  // Opened from a "Find a date" notification while the app was closed: go to it, once.
+  // Opened from a notification while the app was closed: go to it, once.
   const lastTap = useLastTap();
   useEffect(() => {
-    if (lastTap) openPollFrom(lastTap);
+    if (lastTap) openFromTap(lastTap);
   }, [lastTap]);
 
   // Sign this phone up for notifications straight away, so friends' beacons reach it
@@ -174,11 +189,10 @@ export default function Home() {
   useEffect(() => {
     const a = AppState.addEventListener('change', (s) => {
       if (s === 'active') load();
-      else setAnsweredNow([]);
     });
     const n = Notifications.addNotificationReceivedListener(() => load());
     const r = Notifications.addNotificationResponseReceivedListener((res) => {
-      openPollFrom(res);
+      openFromTap(res);
       load();
     });
     return () => {
@@ -194,11 +208,21 @@ export default function Home() {
     setRefreshing(false);
   };
 
+  // Nothing leaves home while it's live (31 Oct). Yours, then ones you're in on, then ones waiting on you.
+  // Hidden ones fold away at the bottom of Waiting on you.
   const isIn = (b: FriendBeacon) => b.responses.some((r) => r.user_id === userId);
-  // Home only shows beacons still waiting on you. Answered and hidden ones live in Lit now.
-  const waiting = incoming.filter((b) => !hidden.includes(b.id) && (!isIn(b) || answeredNow.includes(b.id)));
+  const joined = incoming.filter(isIn);
+  const waiting = incoming.filter((b) => !isIn(b) && !hidden.includes(b.id));
+  const hiddenOnes = incoming.filter((b) => !isIn(b) && hidden.includes(b.id));
   const pollLists = splitPolls(polls, userId);
-  const alone = !mine.length && !pollLists.plans.length && !waiting.length && !pollLists.waiting.length;
+  const alone =
+    !mine.length && !pollLists.plans.length && !joined.length && !pollLists.joined.length && !waiting.length && !pollLists.waiting.length && !hiddenOnes.length;
+  const setHiddenIds = (fn: (h: string[]) => string[]) =>
+    setHidden((h) => {
+      const next = fn(h);
+      saveHidden(next);
+      return next;
+    });
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -212,17 +236,6 @@ export default function Home() {
           <View style={styles.wordmark}>
             <View style={[styles.dot, !mine.length && styles.dotOff]} />
             <Text style={styles.wordmarkText}>Beacon</Text>
-            {/* Friends' lit beacons, including hidden and answered ones. Nothing shows when none are lit. */}
-            {incoming.length > 0 && (
-              <Pressable
-                onPress={() => router.push('/lit')}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={`${incoming.length} friends lit, see all`}
-                style={styles.litFlag}>
-                <Text style={styles.litFlagText}>{incoming.length} lit</Text>
-              </Pressable>
-            )}
           </View>
           <Pressable onPress={() => router.push('/friends')} hitSlop={12}>
             <Text style={[styles.link, requestCount > 0 && { color: colors.ink, fontWeight: '800' }]}>
@@ -257,7 +270,7 @@ export default function Home() {
         </View>
 
         <View style={{ gap: 20 }}>
-          {/* Your plans: your beacons soonest first, each collapsed to one line (decision 51), then your Find a date asks. */}
+          {/* Your plans: what you lit or asked, soonest first, each folded to one line (decision 51). */}
           {(mine.length > 0 || pollLists.plans.length > 0) && (
             <View style={styles.group}>
               <Label>Your plans</Label>
@@ -265,6 +278,7 @@ export default function Home() {
                 <MyBeaconCard
                   key={b.id}
                   beacon={b}
+                  chat={chat[b.id]}
                   open={openId === b.id}
                   onToggle={() => setOpenId(openId === b.id ? null : b.id)}
                   onChange={() => {
@@ -275,36 +289,89 @@ export default function Home() {
                 />
               ))}
               {pollLists.plans.map((p) => (
-                <PollRow key={p.id} poll={p} userId={userId} />
+                <PollRow key={p.id} poll={p} userId={userId} chat={chat[p.id]} />
               ))}
             </View>
           )}
 
-          {(waiting.length > 0 || pollLists.waiting.length > 0) && (
+          {/* You're in: other people's plans you said yes to (31 Oct). White cards with their initial, so they never look like yours. */}
+          {(joined.length > 0 || pollLists.joined.length > 0) && (
+            <View style={styles.group}>
+              <Label>You&apos;re in</Label>
+              {joined.map((b) => (
+                <FriendPlanCard
+                  key={b.id}
+                  beacon={b}
+                  chat={chat[b.id]}
+                  open={openId === b.id}
+                  onToggle={() => setOpenId(openId === b.id ? null : b.id)}
+                  onDone={load}
+                />
+              ))}
+              {pollLists.joined.map((p) => (
+                <PollRow key={p.id} poll={p} userId={userId} chat={chat[p.id]} />
+              ))}
+            </View>
+          )}
+
+          {(waiting.length > 0 || pollLists.waiting.length > 0 || hiddenOnes.length > 0) && (
             <View style={styles.group}>
               <Label>Waiting on you</Label>
               {waiting.map((b) => (
                 <IncomingBeacon
                   key={b.id}
                   beacon={b}
-                  meIn={isIn(b)}
+                  meIn={false}
                   onDone={() => {
-                    setAnsweredNow((a) => [...a, b.id]);
+                    // Said I'm in: it moves up to You're in, opened, so the chat and places are right there.
+                    setOpenId(b.id);
                     load();
                   }}
-                  onDismiss={() => setAnsweredNow((a) => a.filter((x) => x !== b.id))}
-                  onHide={() =>
-                    setHidden((h) => {
-                      const next = [...h, b.id];
-                      saveHidden(next);
-                      return next;
-                    })
-                  }
+                  onHide={() => setHiddenIds((h) => [...h, b.id])}
                 />
               ))}
               {pollLists.waiting.map((p) => (
-                <PollRow key={p.id} poll={p} userId={userId} />
+                <PollRow key={p.id} poll={p} userId={userId} chat={chat[p.id]} />
               ))}
+              {hiddenOnes.length > 0 &&
+                (showHidden ? (
+                  <>
+                    {hiddenOnes.map((b) => (
+                      <View key={b.id} style={{ opacity: 0.6 }}>
+                        <IncomingBeacon
+                          beacon={b}
+                          meIn={false}
+                          hidden
+                          onDone={() => {
+                            setHiddenIds((h) => h.filter((x) => x !== b.id));
+                            setOpenId(b.id);
+                            load();
+                          }}
+                          onUnhide={() => setHiddenIds((h) => h.filter((x) => x !== b.id))}
+                        />
+                      </View>
+                    ))}
+                    <Pressable onPress={() => setShowHidden(false)} hitSlop={8} accessibilityRole="button">
+                      <Text style={styles.actLink}>Fold hidden away</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <Pressable onPress={() => setShowHidden(true)} hitSlop={8} accessibilityRole="button">
+                    <Text style={styles.actLink}>{hiddenOnes.length} hidden · Show</Text>
+                  </Pressable>
+                ))}
+            </View>
+          )}
+
+          {/* Past plans (31 Oct): ended plans you were part of, with Do this again. */}
+          {!forked && (
+            <View style={styles.pastWrap}>
+              <Pressable
+                onPress={() => router.push('/past' as never)}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.pastButton, pressed && { boxShadow: 'none', transform: [{ translateX: 3 }, { translateY: 3 }] }]}>
+                <Text style={styles.pastText}>Past plans</Text>
+              </Pressable>
             </View>
           )}
 
@@ -321,6 +388,7 @@ export default function Home() {
         onClose={() => {
           setComposing(false);
           setReplacing(null);
+          setTemplate(null);
           setLightError('');
           setReady(false);
         }}
@@ -348,6 +416,7 @@ export default function Home() {
           friends={friends}
           circles={circles}
           replacing={replacing}
+          template={template}
           myName={myName}
           onState={onComposerState}
           onNoteFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
@@ -355,6 +424,7 @@ export default function Home() {
           onLit={async () => {
             setComposing(false);
             setReplacing(null);
+            setTemplate(null);
             setJustLit(true);
             setTimeout(() => setJustLit(false), 1500); // flash once, not again on the next visit
             await load();
@@ -379,6 +449,7 @@ function Composer({
   friends,
   circles,
   replacing,
+  template,
   myName,
   onState,
   onLit,
@@ -392,6 +463,8 @@ function Composer({
   friends: Friend[];
   circles: Circle[];
   replacing: MyBeacon | null;
+  /** Do this again (Past plans): what, places and who filled in; the time is picked fresh. */
+  template?: PlanTemplate | null;
   myName: string;
   onState: (ready: boolean, preview: string) => void;
   onLit: () => void;
@@ -407,7 +480,7 @@ function Composer({
   });
   const presets = useMemo(() => (day === null ? [] : presetWindows(day)), [day]);
   const slots = useMemo(() => (day === null ? [] : halfHourSlots(day)), [day]);
-  const [acts, setActs] = useState<string[]>(replacing?.activities ?? []);
+  const [acts, setActs] = useState<string[]>(replacing?.activities ?? template?.activities ?? []);
   const [windowId, setWindowId] = useState<string | null>(() => {
     if (!replacing) return null;
     const s0 = new Date(replacing.start_time).getTime();
@@ -427,13 +500,17 @@ function Composer({
     setCustomEnd(null);
   };
   const [audience, setAudience] = useState<string[]>(() =>
-    !replacing ? [] : (replacing as MyBeacon & { audience_all?: boolean }).audience_all ? ['everyone'] : ((replacing as MyBeacon & { audience_circle_ids?: string[] }).audience_circle_ids ?? [])
+    template && !replacing
+      ? template.audience_all
+        ? ['everyone']
+        : template.audience_circle_ids.filter((id) => circles.some((c) => c.id === id))
+      : !replacing ? [] : (replacing as MyBeacon & { audience_all?: boolean }).audience_all ? ['everyone'] : ((replacing as MyBeacon & { audience_circle_ids?: string[] }).audience_circle_ids ?? [])
   );
   const [note, setNote] = useState(replacing?.note ?? '');
   const whereY = useRef(0);
   // Changing a beacon keeps its places (names from this session's cache).
   const [places, setPlaces] = useState<DraftPlace[]>(() =>
-    [...(replacing?.beacon_places ?? [])]
+    [...(replacing?.beacon_places ?? template?.places.map((p, i) => ({ ...p, position: i + 1 })) ?? [])]
       .sort((a, b) => a.position - b.position)
       .map((p) => ({ placeId: p.place_id ?? undefined, label: p.label ?? undefined, name: placeName(p), area: p.place_id ? cachedPlace(p.place_id)?.area : undefined, starred: p.starred }))
   );
@@ -536,6 +613,7 @@ function Composer({
   return (
     <View style={{ gap: 18 }}>
       {replacing && <Text style={styles.h2}>Change your beacon</Text>}
+      {template && !replacing && <Text style={styles.h2}>Do it again</Text>}
 
       <View style={styles.group}>
         <Label>What are you up for</Label>
@@ -661,16 +739,73 @@ function SlotRow({ slots, value, onChange }: { slots: Date[]; value: Date | null
   );
 }
 
+// A friend's plan you're in on (31 Oct) ------------------------------------------
+// White, not cream, and led by their initial and name, so it never reads as one of yours.
+
+function FriendPlanCard({
+  beacon,
+  chat,
+  open,
+  onToggle,
+  onDone,
+}: {
+  beacon: FriendBeacon;
+  chat?: ThreadInfo;
+  open: boolean;
+  onToggle: () => void;
+  onDone: () => void;
+}) {
+  const name = beacon.owner?.full_name ?? 'A friend';
+  const when = whenLabel(new Date(beacon.start_time), new Date(beacon.end_time));
+  const locked = !!beacon.locked_at;
+  return (
+    <View style={styles.theirs}>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${name}'s ${activityTitle(beacon.activities).toLowerCase()}, ${when.text}, ${locked ? 'locked in' : "you're in"}`}
+        style={styles.mineHead}>
+        <View style={styles.ownerDot}>
+          <Text style={styles.avatarText}>{name[0]}</Text>
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          <View style={styles.titleRow}>
+            <Text style={styles.mineTitle} numberOfLines={1}>
+              {name}&apos;s {activityTitle(beacon.activities).toLowerCase()}
+            </Text>
+            {!open && <NewBadge info={chat} />}
+          </View>
+          <View style={{ flexDirection: 'row' }}>
+            <WhenTag text={when.text} live={when.live} />
+          </View>
+        </View>
+        <View style={[styles.status, locked ? styles.statusLocked : styles.statusIn]}>
+          <Text style={[styles.statusText, locked && { color: colors.butter }]}>{locked ? 'Locked in' : "You're in"}</Text>
+        </View>
+        <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
+      </Pressable>
+      {open && (
+        <View style={styles.mineBody}>
+          <IncomingBeacon beacon={beacon} meIn bare chat={chat} onDone={onDone} />
+        </View>
+      )}
+    </View>
+  );
+}
+
 // My lit beacon ----------------------------------------------------------------
 
 function MyBeaconCard({
   beacon,
+  chat,
   open,
   onToggle,
   onChange,
   onOut,
 }: {
   beacon: MyBeacon;
+  chat?: ThreadInfo;
   open: boolean;
   onToggle: () => void;
   onChange: () => void;
@@ -723,9 +858,12 @@ function MyBeaconCard({
         accessibilityLabel={`${activityTitle(beacon.activities)}, ${when.text}, ${locked ? 'locked in' : `${responders.length} in`}`}
         style={styles.mineHead}>
         <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.mineTitle} numberOfLines={1}>
-            {activityTitle(beacon.activities)}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.mineTitle} numberOfLines={1}>
+              {activityTitle(beacon.activities)}
+            </Text>
+            {!open && <NewBadge info={chat} />}
+          </View>
           <View style={{ flexDirection: 'row' }}>
             <WhenTag text={when.text} live={when.live} />
           </View>
@@ -742,6 +880,8 @@ function MyBeaconCard({
         <View style={styles.mineBody}>
           {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
           {locked && <Text style={styles.muted}>Locked in. Only {onlyWho} can see it, and nobody new can join.</Text>}
+          {/* Chat with everyone who's in (decision 79). Nobody in yet means nobody to chat with. */}
+          {responders.length > 0 && <ChatRow thread={{ beaconId: beacon.id }} title={activityTitle(beacon.activities)} info={chat} />}
           {places.length > 0 && (
             <View style={{ gap: 8 }}>
               {responders.length > 0 && <Label>{locked ? 'Where' : 'Who prefers where'}</Label>}
@@ -766,16 +906,8 @@ function MyBeaconCard({
           )}
           {responders.length ? (
             responders.map((p) => (
-              // One line per person: small icons without labels (decision 42 exception), name shrinks if long.
-              <View key={p.full_name + p.phone_number} style={styles.person}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{p.full_name[0]}</Text>
-                </View>
-                <Text style={[styles.name, { flex: 1 }]} numberOfLines={1}>
-                  {p.full_name}
-                </Text>
-                <ReplyIcons name={p.full_name} phone={p.phone_number} compact />
-              </View>
+              // Call only; tap the name to message them privately (31 Oct: the chat is the one speech bubble).
+              <PlanPerson key={p.full_name + p.phone_number} name={p.full_name} phone={p.phone_number} />
             ))
           ) : (
             <Text style={styles.muted}>You&apos;ll get a buzz when someone taps &quot;I&apos;m in&quot;.</Text>
@@ -868,6 +1000,12 @@ const styles = StyleSheet.create({
   dayChipText: { fontSize: 15, fontWeight: '600' },
   dayChipSub: { fontSize: 12, color: colors.muted },
   mine: { backgroundColor: colors.cream, ...border, ...shadow.card },
+  theirs: { backgroundColor: colors.card, ...border, ...shadow.card },
+  ownerDot: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pastWrap: { alignItems: 'center', paddingTop: 4 },
+  pastButton: { backgroundColor: colors.card, ...border, ...shadow.select, paddingVertical: 8, paddingHorizontal: 16 },
+  pastText: { fontSize: 15, fontWeight: '800' },
   mineHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
   mineBody: { gap: 10, paddingHorizontal: 14, paddingBottom: 14, paddingTop: 12, borderTopWidth: 1.5, borderTopColor: colors.ink },
   status: { borderWidth: 2, borderColor: colors.ink, paddingHorizontal: 8, paddingVertical: 2 },

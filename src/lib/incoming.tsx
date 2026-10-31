@@ -5,7 +5,8 @@ import { useAuth } from './auth';
 import { activityPhrase, type BeaconSummary, fetchFriendsBeacons, fetchLockedInWith, fetchSummary, type LockedPerson, whenLabel } from './beacon';
 import type { DraftPlace } from './places';
 import { PlaceRow, placeName, PrefPicker, usePlaceNames, WherePicker } from './placeui';
-import { ReplyIcons } from './reply';
+import type { ThreadInfo } from './chat';
+import { ChatRow, PlanPerson } from './chatui';
 import { WhenTag } from './when';
 import { supabase } from './supabase';
 import { border, Button, colors, ErrorText, shadow, Text } from './ui';
@@ -13,22 +14,26 @@ import { sentToLine, whosInLine } from './words';
 
 export type FriendBeacon = Awaited<ReturnType<typeof fetchFriendsBeacons>>[number];
 
-// A friend's beacon, as a card. Used on home and on the Lit now screen.
+// A friend's beacon, as a card. Waiting on you: the full card with I'm in and Hide.
+// You're in (31 Oct): `bare` drops the heading, because the folded row above it already says whose and when.
 export function IncomingBeacon({
   beacon,
   meIn,
   onDone,
   onHide,
-  onDismiss,
+  onUnhide,
   hidden,
+  bare,
+  chat,
 }: {
   beacon: FriendBeacon;
   meIn: boolean;
   onDone: () => void;
   onHide?: () => void;
-  /** Home only: clears an answered beacon off home (it stays in Lit now). */
-  onDismiss?: () => void;
+  onUnhide?: () => void;
   hidden?: boolean;
+  bare?: boolean;
+  chat?: ThreadInfo;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -71,13 +76,15 @@ export function IncomingBeacon({
   }
 
   return (
-    <View style={styles.card}>
-      <View style={styles.head}>
-        <Text style={styles.name}>
-          {name}&apos;s up for {activityPhrase(beacon.activities)}
-        </Text>
-        <WhenTag text={when.text} live={when.live} />
-      </View>
+    <View style={bare ? styles.bare : styles.card}>
+      {!bare && (
+        <View style={styles.head}>
+          <Text style={styles.name}>
+            {name}&apos;s up for {activityPhrase(beacon.activities)}
+          </Text>
+          <WhenTag text={when.text} live={when.live} />
+        </View>
+      )}
       {summary && (
         <Text style={styles.small}>
           {sentToLine(summary.to, summary.sent)} · {whosInLine(summary.in)}
@@ -96,52 +103,34 @@ export function IncomingBeacon({
       <ErrorText>{error}</ErrorText>
       {locked ? (
         <>
-          <View style={styles.actions}>
-            <Text style={styles.lockedTag}>Locked in</Text>
-            {onDismiss && (
-              <Pressable onPress={onDismiss} hitSlop={12} accessibilityRole="button">
-                <Text style={styles.link}>Done</Text>
-              </Pressable>
-            )}
-          </View>
           <Text style={styles.in}>{going ? `At ${placeName(going) || 'the place above'}. ` : ''}{others.length ? `You're in with ${others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}` : others[0]}.` : `It's you and ${name}.`}</Text>
           {!going && places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
           {!going && <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />}
-          <CantMakeIt beaconId={beacon.id} name={name} onDone={onDone} />
+          <ChatRow thread={{ beaconId: beacon.id }} title={`${name}'s ${activityPhrase(beacon.activities)}`} info={chat} />
           <Text style={styles.small}>Who&apos;s in</Text>
           {people.map((p) => (
-            <View key={p.id} style={styles.person}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{p.full_name[0]}</Text>
-              </View>
-              <Text style={[styles.in, { flex: 1 }]} numberOfLines={1}>
-                {p.full_name}
-              </Text>
-              {p.phone_number ? <ReplyIcons name={p.full_name} phone={p.phone_number} compact /> : null}
-            </View>
+            <PlanPerson key={p.id} name={p.full_name} phone={p.phone_number} />
           ))}
+          <CantMakeIt beaconId={beacon.id} name={name} onDone={onDone} />
         </>
       ) : meIn ? (
         <>
-          <View style={styles.actions}>
-            <Text style={styles.in}>You&apos;re in. {name} knows.</Text>
-            {onDismiss && (
-              <Pressable onPress={onDismiss} hitSlop={12} accessibilityRole="button">
-                <Text style={styles.link}>Done</Text>
-              </Pressable>
-            )}
-          </View>
+          <Text style={styles.in}>You&apos;re in. {name} knows.</Text>
+          <ChatRow thread={{ beaconId: beacon.id }} title={`${name}'s ${activityPhrase(beacon.activities)}`} info={chat} />
           {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
           <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />
+          <PlanPerson name={name} phone={phone} />
           <CantMakeIt beaconId={beacon.id} name={name} onDone={onDone} />
-          <Text style={styles.small}>Message {name}</Text>
-          <ReplyIcons name={name} phone={phone} />
         </>
       ) : (
         <View style={styles.actions}>
           <Button label="I'm in" variant="accent" compact onPress={imIn} busy={busy} />
           {hidden ? (
-            <Text style={styles.tag}>Hidden from home</Text>
+            onUnhide ? (
+              <Pressable onPress={onUnhide} hitSlop={12} accessibilityRole="button" accessibilityLabel={`Unhide ${name}'s beacon`}>
+                <Text style={styles.link}>Unhide</Text>
+              </Pressable>
+            ) : null
           ) : onHide ? (
             <Pressable onPress={onHide} hitSlop={12} accessibilityRole="button" accessibilityLabel={`Hide ${name}'s beacon`}>
               <Text style={styles.link}>Hide</Text>
@@ -150,7 +139,11 @@ export function IncomingBeacon({
         </View>
       )}
       <Text style={styles.small}>
-        {locked ? 'Only the people who are in can see this. You can message your friends here.' : "Everyone it went to sees who it went to and who's in, by first name. Hiding is silent."}
+        {locked
+          ? 'Only the people who are in can see this.'
+          : meIn
+            ? "Everyone it went to sees who's in, by first name. Only people who are in see the chat."
+            : "Everyone it went to sees who it went to and who's in, by first name. Hiding is silent."}
       </Text>
     </View>
   );
@@ -259,6 +252,7 @@ function SuggestPlace({ beaconId, userId, mine, onSaved }: { beaconId: string; u
 
 const styles = StyleSheet.create({
   card: { backgroundColor: colors.card, ...border, ...shadow.card, padding: 14, gap: 6 },
+  bare: { gap: 8 },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   name: { fontSize: 19, fontWeight: '800', letterSpacing: -0.2, flexShrink: 1 },
   till: { color: colors.muted, fontSize: 13 },

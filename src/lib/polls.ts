@@ -9,6 +9,8 @@ export type Poll = {
   dates: string[];
   time_label: string;
   start_minute: number | null;
+  /** The day the organiser locked in (open question 25, migration 0023). Null until then. */
+  locked_day?: string | null;
   end_minute: number | null;
   created_at: string;
   owner: { full_name: string } | null;
@@ -84,4 +86,14 @@ export function tally(p: Poll) {
   }));
   const best = [...rows].sort((a, b) => b.who.length - a.who.length || a.day.localeCompare(b.day))[0];
   return { rows, best, total: p.poll_invitees.length, answered: p.poll_invitees.filter((i) => i.answered_at).length };
+}
+
+/** The last day a Find a day is live: the locked day, or its last date. After that it's a past plan. */
+export function pollLastDay(p: Pick<Poll, 'dates' | 'locked_day'>): string {
+  return p.locked_day ?? [...p.dates].sort()[p.dates.length - 1];
+}
+
+/** Still on home? */
+export function pollLive(p: Pick<Poll, 'dates' | 'locked_day'>, today = todayYmd()): boolean {
+  return pollLastDay(p) >= today;
 }

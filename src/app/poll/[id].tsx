@@ -1,12 +1,15 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { Alert, Pressable, Share, StyleSheet, View } from 'react-native';
 
 import { useAuth } from '@/lib/auth';
 import { askCalendar, calendarAllowed, checkDates, type DayCheck } from '@/lib/busy';
-import { fetchPoll, fmtDay, tally, type Poll } from '@/lib/polls';
+import { fetchChatOverview, type ThreadInfo } from '@/lib/chat';
+import { ChatRow } from '@/lib/chatui';
+import { fetchPoll, fmtDay, pollLive, tally, todayYmd, type Poll } from '@/lib/polls';
+import { Sheet } from '@/lib/sheet';
 import { supabase } from '@/lib/supabase';
-import { border, Button, Card, colors, ErrorText, ScrollScreen, shadow, Text } from '@/lib/ui';
+import { BackBar, border, Button, Card, colors, ErrorText, goBack, ScrollScreen, shadow, Text } from '@/lib/ui';
 
 // One "Find a date": results for the organiser, ticking dates for everyone else.
 export default function PollScreen() {
@@ -42,9 +45,12 @@ export default function PollScreen() {
   );
 
   const calChecked = useRef(false);
+  const [chat, setChat] = useState<ThreadInfo | undefined>(undefined);
+  const [picking, setPicking] = useState(false);
   const load = useCallback(async () => {
-    const p = await fetchPoll(id);
+    const [p, ov] = await Promise.all([fetchPoll(id), fetchChatOverview()]);
     setPoll(p);
+    setChat(ov[id]);
     if (!p) return;
     const myAnswers = p.poll_answers.filter((a) => a.user_id === userId).map((a) => a.day);
     const answeredBefore = !!p.poll_invitees.find((i) => i.user_id === userId)?.answered_at;
@@ -63,13 +69,13 @@ export default function PollScreen() {
     }, [load])
   );
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
+  const close = goBack;
 
   if (poll === undefined) return <ScrollScreen>{null}</ScrollScreen>;
   if (poll === null)
     return (
       <ScrollScreen>
-        <Text style={styles.h1}>Not found</Text>
+        <BackBar title="Not found" />
         <Text style={styles.muted}>This one may have been deleted.</Text>
         <Button label="Back" secondary onPress={close} />
       </ScrollScreen>
@@ -97,12 +103,18 @@ export default function PollScreen() {
   if (editing || (!isOwner && !answered)) {
     return (
       <ScrollScreen>
-        <View style={styles.top}>
-          <Text style={styles.h1}>{poll.title}</Text>
-          <Pressable onPress={editing ? () => setEditing(false) : close} hitSlop={12}>
-            <Text style={styles.link}>{isOwner && !answered ? 'Skip' : editing ? 'Cancel' : 'Close'}</Text>
-          </Pressable>
-        </View>
+        <BackBar
+          title={poll.title}
+          sub={isOwner ? 'Your Find a day' : `From ${ownerName}`}
+          onBack={editing && answered ? () => setEditing(false) : close}
+          right={
+            isOwner && !answered ? (
+              <Pressable onPress={() => setEditing(false)} hitSlop={12} accessibilityRole="button">
+                <Text style={styles.link}>Skip</Text>
+              </Pressable>
+            ) : undefined
+          }
+        />
         <Card>
           <Text style={styles.cardTitle}>{isOwner ? 'Your dates too' : `From ${ownerName}`}</Text>
           <Text style={styles.body}>{datesLine}</Text>
@@ -175,32 +187,64 @@ export default function PollScreen() {
     ]);
   }
 
+  // Lock in a date (open question 25, decision 81): the organiser picks the day, everyone asked gets a buzz.
+  async function lockDay(day: string | null) {
+    setPicking(false);
+    setBusy(true);
+    setError('');
+    const { error } = await supabase.rpc('lock_poll', { p_poll_id: poll!.id, p_day: day });
+    setBusy(false);
+    if (error) return setError(error.message);
+    load();
+  }
+  const today = todayYmd();
+  const live = pollLive(poll);
+  const lockable = rows.filter((r) => r.day >= today);
+
   // Results: organiser, or invitee after answering.
   const shareText = `${poll.title}: ${fmtDay(best.day)}, ${poll.time_label.toLowerCase()} works for ${best.who.length} of ${total}${best.who.length ? ` (${best.who.join(', ')})` : ''}. Shall we lock it in?`;
 
   return (
     <ScrollScreen>
-      <View style={styles.top}>
-        <Text style={styles.h1}>{isOwner ? poll.title : `Thanks, ${ownerName}'s been told.`}</Text>
-        {isOwner ? (
-          <Pressable onPress={close} hitSlop={12}>
-            <Text style={styles.link}>Done</Text>
-          </Pressable>
-        ) : (
-          <Pressable onPress={() => setEditing(true)} hitSlop={12}>
-            <Text style={styles.link}>Change</Text>
-          </Pressable>
-        )}
-      </View>
+      <BackBar
+        title={poll.title}
+        sub={isOwner ? 'Your Find a day' : `From ${ownerName}`}
+        right={
+          !isOwner && live && !poll.locked_day ? (
+            <Pressable onPress={() => setEditing(true)} hitSlop={12} accessibilityRole="button">
+              <Text style={styles.link}>Change</Text>
+            </Pressable>
+          ) : undefined
+        }
+      />
       <Text style={styles.muted}>
         {isOwner
           ? `${datesLine}. ${answeredCount} of ${total} answered.`
-          : mine.length
-            ? `You're free on ${mine.length} ${mine.length === 1 ? 'date' : 'dates'}. Here's the group so far.`
-            : "You said none of these work. Here's the group so far."}
+          : `${ownerName}'s been told. ` +
+            (mine.length ? `You're free on ${mine.length} ${mine.length === 1 ? 'date' : 'dates'}.` : 'You said none of these work.')}
       </Text>
 
-      {isOwner && best.who.length > 0 && (
+      {poll.locked_day ? (
+        <View style={styles.locked}>
+          <Text style={styles.lockedEyebrow}>LOCKED IN</Text>
+          <Text style={styles.cardTitle}>
+            {fmtDay(poll.locked_day)} · {poll.time_label}
+          </Text>
+          {(() => {
+            const r = rows.find((x) => x.day === poll.locked_day);
+            return r ? <Text style={styles.small}>{r.who.length ? `Free: ${r.who.join(', ')}` : 'Nobody said they were free that day.'}</Text> : null;
+          })()}
+          {isOwner && live && (
+            <Pressable onPress={() => setPicking(true)} hitSlop={8} accessibilityRole="button">
+              <Text style={[styles.link, { color: colors.ink, textDecorationLine: 'underline' }]}>Change the date</Text>
+            </Pressable>
+          )}
+        </View>
+      ) : null}
+
+      <ChatRow thread={{ pollId: poll.id }} title={poll.title} info={chat} />
+
+      {isOwner && !poll.locked_day && best.who.length > 0 && (
         <>
           <View style={styles.best}>
             <Text style={styles.eyebrow}>Best so far</Text>
@@ -211,6 +255,12 @@ export default function PollScreen() {
               {best.who.length} of {total} free: {best.who.join(', ')}
             </Text>
           </View>
+          {best.day >= today && <Button label={`Lock in ${fmtDay(best.day)}`} variant="butter" busy={busy} onPress={() => lockDay(best.day)} />}
+          {lockable.length > 1 && (
+            <Pressable onPress={() => setPicking(true)} hitSlop={8} accessibilityRole="button" style={{ alignSelf: 'center' }}>
+              <Text style={[styles.link, { textDecorationLine: 'underline' }]}>Lock in a different date</Text>
+            </Pressable>
+          )}
           <Button label="Share the best date" secondary onPress={() => Share.share({ message: shareText })} />
         </>
       )}
@@ -235,13 +285,37 @@ export default function PollScreen() {
       {isOwner && waiting.length > 0 && (
         <Text style={styles.muted}>Not answered yet: {waiting.map((w) => (w === ownerName ? 'you' : w)).join(', ')}.</Text>
       )}
-      {isOwner && <Button label={answered ? 'Change my dates' : 'Add my dates'} secondary onPress={() => setEditing(true)} />}
+      {isOwner && live && !poll.locked_day && <Button label={answered ? 'Change my dates' : 'Add my dates'} secondary onPress={() => setEditing(true)} />}
       {isOwner && (
         <Pressable onPress={confirmDelete} hitSlop={12} style={styles.deleteWrap} accessibilityRole="button">
           <Text style={styles.delete}>Delete this date request</Text>
         </Pressable>
       )}
       <ErrorText>{error}</ErrorText>
+
+      <Sheet visible={picking} onClose={() => setPicking(false)} fit>
+        <View style={{ gap: 10, paddingBottom: 8 }}>
+          <Text style={styles.cardTitle}>{poll.locked_day ? 'Change the date' : 'Lock in a date'}</Text>
+          <Text style={styles.muted}>Everyone asked gets a buzz with the date.</Text>
+          {lockable.map((r) => (
+            <Pressable
+              key={r.day}
+              onPress={() => lockDay(r.day)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.pick, poll.locked_day === r.day && { backgroundColor: colors.butter }, pressed && { boxShadow: 'none', transform: [{ translateX: 3 }, { translateY: 3 }] }]}>
+              <Text style={[styles.day, { flex: 1 }]}>{fmtDay(r.day)}</Text>
+              <Text style={styles.muted}>
+                {r.who.length}/{total} free
+              </Text>
+            </Pressable>
+          ))}
+          {poll.locked_day && (
+            <Pressable onPress={() => lockDay(null)} accessibilityRole="button" style={[styles.pick, styles.pickLater]}>
+              <Text style={styles.day}>Not sure yet, unlock it</Text>
+            </Pressable>
+          )}
+        </View>
+      </Sheet>
     </ScrollScreen>
   );
 }
@@ -267,6 +341,10 @@ const styles = StyleSheet.create({
   tickOn: { backgroundColor: colors.butter, ...shadow.select },
   tickText: { fontSize: 20, fontWeight: '800' },
   best: { backgroundColor: colors.butter, ...border, ...shadow.card, padding: 16, gap: 4 },
+  locked: { backgroundColor: colors.butter, ...border, ...shadow.card, padding: 16, gap: 4 },
+  lockedEyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, alignSelf: 'flex-start', backgroundColor: colors.ink, color: colors.butter, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' },
+  pick: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card, ...border, ...shadow.select, paddingVertical: 12, paddingHorizontal: 12 },
+  pickLater: { backgroundColor: colors.bg, borderStyle: 'dashed', boxShadow: 'none' },
   eyebrow: { fontSize: 13, fontWeight: '800' },
   bar: { height: 10, backgroundColor: colors.bg, borderWidth: 1.5, borderColor: colors.ink, overflow: 'hidden', marginTop: 4 },
   barFill: { height: '100%', backgroundColor: colors.accent },
