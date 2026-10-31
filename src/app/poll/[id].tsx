@@ -7,6 +7,7 @@ import { askCalendar, calendarAllowed, checkDates, type DayCheck } from '@/lib/b
 import { fetchChatOverview, type ThreadInfo } from '@/lib/chat';
 import { ChatRow } from '@/lib/chatui';
 import { fetchPoll, fmtDay, pollLive, tally, todayYmd, type Poll } from '@/lib/polls';
+import { NudgeList } from '@/lib/nudge';
 import { Sheet } from '@/lib/sheet';
 import { supabase } from '@/lib/supabase';
 import { BackBar, border, Button, Card, colors, ErrorText, goBack, ScrollScreen, shadow, Text } from '@/lib/ui';
@@ -85,7 +86,6 @@ export default function PollScreen() {
   const me = poll.poll_invitees.find((i) => i.user_id === userId);
   const answered = !!me?.answered_at;
   const { rows, best, total, answered: answeredCount } = tally(poll);
-  const waiting = poll.poll_invitees.filter((i) => !i.answered_at).map((i) => i.profiles?.full_name ?? 'A friend');
   const ownerName = poll.owner?.full_name ?? 'A friend';
   const datesLine = `${poll.dates.length} ${poll.dates.length === 1 ? 'date' : 'dates'}, ${poll.time_label.toLowerCase()}`;
 
@@ -282,8 +282,12 @@ export default function PollScreen() {
           </View>
         ))}
       </View>
-      {isOwner && waiting.length > 0 && (
-        <Text style={styles.muted}>Not answered yet: {waiting.map((w) => (w === ownerName ? 'you' : w)).join(', ')}.</Text>
+      {/* Nudge whoever hasn't ticked dates (decision 87), until a date is locked in. */}
+      {isOwner && live && !poll.locked_day && (
+        <NudgeList
+          pollId={poll.id}
+          people={poll.poll_invitees.filter((i) => !i.answered_at && i.user_id !== userId).map((i) => ({ id: i.user_id, name: i.profiles?.full_name ?? 'A friend' }))}
+        />
       )}
       {isOwner && live && !poll.locked_day && <Button label={answered ? 'Change my dates' : 'Add my dates'} secondary onPress={() => setEditing(true)} />}
       {isOwner && (

@@ -45,6 +45,7 @@ import { fetchChatOverview, type ThreadInfo } from '@/lib/chat';
 import { ChatButton, chatHref, PlanPerson } from '@/lib/chatui';
 import { takeTemplate, type PlanTemplate } from '@/lib/again';
 import { routeForBuzz, type BuzzData } from '@/lib/buzz';
+import { fetchNotAnswered, NudgeList, syncHidden } from '@/lib/nudge';
 import { WhenTag } from '@/lib/when';
 import { supabase } from '@/lib/supabase';
 import { border, Button, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
@@ -290,7 +291,10 @@ export default function Home() {
                     setOpenId(b.id);
                     load();
                   }}
-                  onHide={() => setHiddenIds((h) => [...h, b.id])}
+                  onHide={() => {
+                    setHiddenIds((h) => [...h, b.id]);
+                    syncHidden(b.id, true);
+                  }}
                 />
               ))}
               {pollLists.waiting.map((p) => (
@@ -307,10 +311,14 @@ export default function Home() {
                           hidden
                           onDone={() => {
                             setHiddenIds((h) => h.filter((x) => x !== b.id));
+                            syncHidden(b.id, false);
                             setOpenId(b.id);
                             load();
                           }}
-                          onUnhide={() => setHiddenIds((h) => h.filter((x) => x !== b.id))}
+                          onUnhide={() => {
+                            setHiddenIds((h) => h.filter((x) => x !== b.id));
+                            syncHidden(b.id, false);
+                          }}
                         />
                       </View>
                     ))}
@@ -972,6 +980,12 @@ function MyBeaconCard({
   const start = new Date(beacon.start_time);
   const end = new Date(beacon.end_time);
   const when = whenLabel(start, end);
+  // Who it went to and hasn't answered, loaded when the card opens (for Nudge).
+  const [notAnswered, setNotAnswered] = useState<{ id: string; name: string }[]>([]);
+  const inKey = beacon.responses.map((r) => r.user_id).join(',');
+  useEffect(() => {
+    if (open) fetchNotAnswered(beacon.id, inKey ? inKey.split(',') : []).then(setNotAnswered);
+  }, [open, beacon.id, inKey]);
   const responders = beacon.responses.map((r) => r.profiles).filter(Boolean) as { full_name: string; phone_number: string | null }[];
   const places = [...(beacon.beacon_places ?? [])].sort((a, b) => a.position - b.position);
   usePlaceNames(places);
@@ -1069,6 +1083,8 @@ function MyBeaconCard({
           ) : (
             <Text style={styles.muted}>You&apos;ll get a buzz when someone taps &quot;I&apos;m in&quot;.</Text>
           )}
+          {/* Nudge whoever hasn't answered (decision 87). Not once it's locked: nobody new can join. */}
+          {!locked && <NudgeList beaconId={beacon.id} people={notAnswered} />}
           {!locked && responders.length > 0 && (
             // Decision 61: one tap, no confirm, because Unlock undoes it.
             <Button label={places.length === 1 ? `Lock it in at ${placeName(places[0]) || 'that place'}` : 'Lock it in'} variant="butter" compact busy={busy} onPress={tapLock} />
