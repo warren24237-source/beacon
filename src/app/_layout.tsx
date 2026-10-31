@@ -43,7 +43,6 @@ function Routes() {
       <Stack.Protected guard={joined && hasPhone}>
         <Stack.Screen name="index" />
         <Stack.Screen name="friends" />
-        <Stack.Screen name="find-date" />
         <Stack.Screen name="poll/[id]" />
         <Stack.Screen name="chat" />
         <Stack.Screen name="past" />

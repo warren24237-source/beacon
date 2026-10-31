@@ -36,7 +36,10 @@ export function PollRow({ poll, userId, chat }: { poll: Poll; userId: string; ch
       accessibilityRole="button"
       accessibilityLabel={`Find a day: ${poll.title}. ${sub}`}>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.kind}>{poll.locked_day ? 'FIND A DAY · LOCKED IN' : 'FIND A DAY'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TickMark />
+          <Text style={styles.kind}>{poll.locked_day ? 'FIND A DAY · LOCKED IN' : 'FIND A DAY'}</Text>
+        </View>
         <Text style={styles.title} numberOfLines={1}>
           {poll.title}
         </Text>
@@ -48,6 +51,18 @@ export function PollRow({ poll, userId, chat }: { poll: Poll; userId: string; ch
     </Pressable>
   );
 }
+
+/** Three small boxes, two ticked: Find a day's mark, on the sheet and on its cards. */
+export function TickMark() {
+  return (
+    <View style={{ flexDirection: 'row', gap: 2 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {[true, false, true].map((on, i) => (
+        <View key={i} style={{ width: 10, height: 10, borderWidth: 1.5, borderColor: colors.ink, backgroundColor: on ? colors.butter : colors.card }} />
+      ))}
+    </View>
+  );
+}
+
 
 const styles = StyleSheet.create({
   item: { backgroundColor: colors.card, ...border, ...shadow.card, paddingVertical: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },

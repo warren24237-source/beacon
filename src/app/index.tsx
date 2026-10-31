@@ -1,5 +1,4 @@
 import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
@@ -10,6 +9,8 @@ import { useAuth } from '@/lib/auth';
 import {
   ACTIVITIES,
   activityOptions,
+  activityPhrase,
+  dayStart,
   activityTitle,
   beaconPreview,
   cleanActivity,
@@ -31,10 +32,10 @@ import {
   type Friend,
 } from '@/lib/beacon';
 import { BeaconGlow, LampButton, UnlitLamp } from '@/lib/glow';
-import { LampFork } from '@/lib/fork';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
-import { fetchPolls, type Poll } from '@/lib/polls';
-import { PollRow, splitPolls } from '@/lib/pollsHome';
+import { Calendar } from '@/lib/calendar';
+import { DAY_SLOTS, fetchPolls, fmtMinutes, parseYmd, ymd, type Poll } from '@/lib/polls';
+import { PollRow, splitPolls, TickMark } from '@/lib/pollsHome';
 import { Sheet } from '@/lib/sheet';
 import { enableMatchAlerts } from '@/lib/push';
 import { PlaceRow, placeName, usePlaceNames, WherePicker } from '@/lib/placeui';
@@ -66,7 +67,24 @@ function openFromTap(res: Notifications.NotificationResponse, openBeacon: (id: s
   }
 }
 
-const LAMP_TAPPED = 'beacon:lampTapped';
+
+// Find a day's time of day (one sheet, 31 Oct). Minutes after midnight; null = any time.
+type FadTimeId = 'any' | 'morning' | 'afternoon' | 'evening' | 'custom';
+const FAD_TIMES: { id: Exclude<FadTimeId, 'custom'>; label: string; sub?: string; start: number | null; end: number | null }[] = [
+  { id: 'any', label: 'Any time', start: null, end: null },
+  { id: 'morning', label: 'Morning', sub: '9am to 12pm', start: 540, end: 720 },
+  { id: 'afternoon', label: 'Afternoon', sub: '12pm to 5pm', start: 720, end: 1020 },
+  { id: 'evening', label: 'Evening', sub: '6pm to 11pm', start: 1080, end: 1380 },
+];
+function fadWindowOf(id: FadTimeId, from: number, to: number): { label: string; start: number | null; end: number | null } {
+  if (id === 'custom') return { label: `${fmtMinutes(from)} to ${fmtMinutes(to)}`, start: from, end: to };
+  const t = FAD_TIMES.find((x) => x.id === id)!;
+  return { label: t.label, start: t.start, end: t.end };
+}
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DOW3 = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** "Thu 5 Nov". */
+const shortDate = (d: Date) => `${DOW3[d.getDay()]} ${d.getDate()} ${MON3[d.getMonth()]}`;
 
 export default function Home() {
   const { session, profile } = useAuth();
@@ -89,10 +107,6 @@ export default function Home() {
   // "Do this again" from Past plans opens the light sheet filled in.
   const [template, setTemplate] = useState<PlanTemplate | null>(null);
   const [polls, setPolls] = useState<Poll[]>([]);
-  // The lamp forks into "Up for something" and "Find a day" (decision 69).
-  const [forked, setForked] = useState(false);
-  // One-off "Tap the beacon" hint until the lamp has been tapped once on this phone (decision 71).
-  const [hint, setHint] = useState(false);
   const [ready, setReady] = useState(false);
   const [preview, setPreview] = useState('');
   const scrollRef = useRef<ScrollViewInstance>(null);
@@ -147,7 +161,6 @@ export default function Home() {
       const again = takeTemplate();
       if (again) {
         setTemplate(again);
-        setForked(false);
         setComposing(true);
       }
       return () => clearInterval(t);
@@ -156,9 +169,6 @@ export default function Home() {
 
   useEffect(() => {
     loadHidden().then(setHidden);
-    AsyncStorage.getItem(LAMP_TAPPED)
-      .then((v) => setHint(!v))
-      .catch(() => {});
   }, []);
 
   const onComposerState = useCallback((r: boolean, p: string) => {
@@ -166,13 +176,10 @@ export default function Home() {
     setPreview(p);
   }, []);
 
+  // The lamp opens the one sheet straight away (31 Oct: no fork; When decides which kind of plan).
   const tapLamp = () => {
     if (composing) return;
-    setForked((f) => !f);
-    if (hint) {
-      setHint(false);
-      AsyncStorage.setItem(LAMP_TAPPED, '1').catch(() => {});
-    }
+    setComposing(true);
   };
 
   // Opened from a notification while the app was closed: go to it, once.
@@ -230,7 +237,7 @@ export default function Home() {
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={[styles.scroll, alone && !forked && { flexGrow: 1 }]}
+        contentContainerStyle={[styles.scroll, alone && { flexGrow: 1 }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}>
         <View style={styles.top}>
@@ -245,28 +252,15 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {/* No words around the lamp (decision 71). It sits alone in the middle when there's nothing else. */}
-        <View style={[styles.hero, alone && !forked && styles.heroAlone]}>
+        {/* No words around the lamp (decision 71, Warren again 31 Oct: no "Tap the beacon" either).
+            With nothing on, the white unlit lamp sits alone in the middle. */}
+        <View style={[styles.hero, alone && styles.heroAlone]}>
           {mine.length ? (
-            <Pressable onPress={tapLamp} accessibilityRole="button" accessibilityLabel="Make a plan" accessibilityState={{ expanded: forked }}>
+            <Pressable onPress={tapLamp} accessibilityRole="button" accessibilityLabel="Make a plan">
               <BeaconGlow flash={justLit} size={alone ? 170 : 140} />
             </Pressable>
           ) : (
-            <UnlitLamp onPress={tapLamp} size={alone && !forked ? 170 : 140} nudge={!forked} />
-          )}
-          {hint && alone && !forked && <Text style={[styles.muted, styles.center]}>Tap the beacon</Text>}
-          {forked && (
-            <LampFork
-              name={myName}
-              onNow={() => {
-                setForked(false);
-                setComposing(true);
-              }}
-              onPlan={() => {
-                setForked(false);
-                router.push('/find-date');
-              }}
-            />
+            <UnlitLamp onPress={tapLamp} size={alone ? 170 : 140} nudge />
           )}
         </View>
 
@@ -365,20 +359,22 @@ export default function Home() {
             </View>
           )}
 
-          {/* Past plans (31 Oct): ended plans you were part of, with Do this again. */}
-          {!forked && (
-            <View style={styles.pastWrap}>
+          {/* Past plans (31 Oct): ended plans you were part of, with Do this again.
+              With nothing on, it's a quiet link at the foot so the lamp still sits alone. */}
+          <View style={styles.pastWrap}>
+            {alone ? (
+              <Pressable onPress={() => router.push('/past' as never)} hitSlop={10} accessibilityRole="button">
+                <Text style={styles.actLink}>Past plans</Text>
+              </Pressable>
+            ) : (
               <Pressable
                 onPress={() => router.push('/past' as never)}
                 accessibilityRole="button"
                 style={({ pressed }) => [styles.pastButton, pressed && { boxShadow: 'none', transform: [{ translateX: 3 }, { translateY: 3 }] }]}>
                 <Text style={styles.pastText}>Past plans</Text>
               </Pressable>
-            </View>
-          )}
-
-          {/* While the lamp is forked, everything else dims; a tap anywhere on it folds the fork back. */}
-          {forked && <Pressable style={styles.dim} onPress={() => setForked(false)} accessibilityLabel="Close" accessibilityRole="button" />}
+            )}
+          </View>
         </View>
       </ScrollView>
       </KeyboardAvoidingView>
@@ -493,8 +489,22 @@ function Composer({
   const [customStart, setCustomStart] = useState<Date | null>(null);
   const [customEnd, setCustomEnd] = useState<Date | null>(null);
 
+  // One sheet from the lamp (31 Oct, prototype design/prototypes/one-sheet.html): When decides.
+  // A day (or Pick a date, up to 3 months) is Up for something; Find a day lets friends tick dates.
+  const [fad, setFad] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [fadDates, setFadDates] = useState<string[]>([]);
+  const [fadTime, setFadTime] = useState<FadTimeId | null>(null);
+  const [fadFrom, setFadFrom] = useState(18 * 60);
+  const [fadTo, setFadTo] = useState(21 * 60);
+  const [people, setPeople] = useState<string[]>([]);
+  // Up to 3 months ahead, for beacons (Pick a date) and Find a day dates alike.
+  const maxDay = useMemo(() => ymd(dayStart(92)), []);
+  const fadMax = maxDay;
+
   // Changing day clears the time, so nothing is picked for you.
   const pickDay = (d: number) => {
+    setFad(false);
     if (d === day) return;
     setDay(d);
     setWindowId(null);
@@ -568,28 +578,60 @@ function Composer({
     if (audience.includes('everyone')) return friends.map((f) => f.full_name);
     const ids: string[] = [];
     audience.forEach((cid) => circles.find((c) => c.id === cid)?.member_ids.forEach((m) => !ids.includes(m) && ids.push(m)));
+    // Find a day can also go to people picked one by one (decision 37).
+    if (fad) people.forEach((m) => !ids.includes(m) && ids.push(m));
     return ids.map((id) => friends.find((f) => f.id === id)?.full_name).filter(Boolean) as string[];
-  }, [audience, circles, friends]);
+  }, [audience, circles, friends, fad, people]);
   const recipientCount = recipients.length;
 
   const chosen = windowId === 'custom' ? { start: customStart, end: customEnd } : presets.find((p) => p.id === windowId);
-  const hasWhen = !!chosen?.start && !!chosen?.end && chosen.end > chosen.start;
+  const fadWindow = fadTime ? fadWindowOf(fadTime, fadFrom, fadTo) : null;
+  const hasWhen = fad
+    ? fadDates.length > 0 && !!fadWindow && (fadTime !== 'custom' || fadTo > fadFrom)
+    : !!chosen?.start && !!chosen?.end && chosen.end > chosen.start;
 
   // Tell the footer whether the lamp can light, and what to say above it.
-  const missing = [!acts.length && 'what', !hasWhen && 'when', !audience.length && 'who'].filter(Boolean) as string[];
+  const hasWho = audience.length > 0 || (fad && people.length > 0);
+  const missing = [!acts.length && 'what', !hasWhen && 'when', !hasWho && 'who'].filter(Boolean) as string[];
   const ready = !missing.length;
-  const preview = ready && chosen?.start && chosen?.end
-    ? beaconPreview(myName || 'You', acts, chosen.start, chosen.end)
-    : `Pick ${missing.length > 1 ? `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}` : missing[0]}.`;
+  const preview = !ready
+    ? `Pick ${missing.length > 1 ? `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}` : missing[0]}.`
+    : fad
+      ? `${myName || 'You'} wants to find a day for ${activityPhrase(acts)}. Tap when you're free.`
+      : beaconPreview(myName || 'You', acts, chosen!.start!, chosen!.end!);
   useEffect(() => {
     onState(ready, preview);
   }, [ready, preview, onState]);
 
   async function light() {
     setError('');
-    if (!ready || !chosen?.start || !chosen?.end) return setError(`Pick ${missing.join(', ')} first.`);
+    if (!ready) return setError(`Pick ${missing.join(', ')} first.`);
     if (!friends.length) return setError('Add a friend first. Tap Friends at the top.');
     if (!recipientCount) return setError('Nobody is in that circle yet. Add friends to it in Friends.');
+
+    if (fad && fadWindow) {
+      // Find a day: friends tick the dates that suit, then you lock one in.
+      setBusy(true);
+      enableMatchAlerts(userId);
+      const all = audience.includes('everyone');
+      const { data, error } = await supabase.rpc('create_poll', {
+        p_title: activityTitle(acts).slice(0, 40),
+        p_dates: [...fadDates].sort(),
+        p_time_label: fadWindow.label,
+        p_all: all,
+        p_circle_ids: all ? [] : audience,
+        p_user_ids: all ? [] : people,
+        p_start_minute: fadWindow.start,
+        p_end_minute: fadWindow.end,
+      });
+      setBusy(false);
+      if (error) return setError(error.message);
+      onLit();
+      // Straight to ticking your own dates, as before (decision 39).
+      router.push(`/poll/${(data as { poll_id: string }).poll_id}?answer=1`);
+      return;
+    }
+    if (!chosen?.start || !chosen?.end) return setError('Pick when first.');
 
     setBusy(true);
     enableMatchAlerts(userId); // usually already done when the app opened; never hold up the beacon for it
@@ -656,42 +698,138 @@ function Composer({
 
       <View style={styles.group}>
         <Label>When</Label>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4, paddingBottom: 4 }}>
+        <View style={styles.dayWrap}>
           {days.map((d) => (
             <Pressable
               key={d.offset}
-              onPress={() => pickDay(d.offset)}
+              onPress={() => {
+                setPicking(false);
+                pickDay(d.offset);
+              }}
               accessibilityRole="button"
-              accessibilityState={{ selected: day === d.offset }}
-              style={[styles.dayChip, day === d.offset && styles.dayChipOn]}>
+              accessibilityState={{ selected: !fad && day === d.offset }}
+              style={[styles.dayChip, !fad && day === d.offset && styles.dayChipOn]}>
               <Text style={styles.dayChipText}>{d.label}</Text>
               <Text style={styles.dayChipSub}>{d.sub}</Text>
             </Pressable>
           ))}
-        </ScrollView>
-        {/* A day first, then its times. */}
-        {day !== null && (
-          <Chips>
-            {presets.map((p) => (
-              <Chip key={p.id} label={p.label} sub={fmtRange(p.start, p.end)} on={windowId === p.id} onPress={() => setWindowId(p.id)} />
-            ))}
-            <Chip label="Pick times" on={windowId === 'custom'} onPress={() => setWindowId('custom')} />
-          </Chips>
+          {/* Pick a date: a beacon can go up to 3 months ahead, not just a week (a tester's question, 31 Oct). */}
+          <Pressable
+            onPress={() => {
+              setFad(false);
+              setPicking((x) => !x);
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !fad && day !== null && day > 6 }}
+            style={[styles.dayChip, !fad && day !== null && day > 6 && styles.dayChipOn]}>
+            <Text style={styles.dayChipText}>{!fad && day !== null && day > 6 ? shortDate(dayStart(day)) : 'Pick a date'}</Text>
+            <Text style={styles.dayChipSub}>up to 3 months</Text>
+          </Pressable>
+        </View>
+        {picking && !fad && (
+          <Calendar
+            selected={day !== null && day > 6 ? [ymd(dayStart(day))] : []}
+            start={ymd(dayStart(7))}
+            max={maxDay}
+            onPress={(d) => {
+              setPicking(false);
+              pickDay(Math.round((parseYmd(d).getTime() - dayStart(0).getTime()) / 864e5));
+            }}
+          />
         )}
-        {day !== null && windowId === 'custom' && (
-          <View style={{ gap: 8 }}>
-            <Text style={styles.muted}>From</Text>
-            <SlotRow slots={slots} value={customStart} onChange={setCustomStart} />
-            <Text style={styles.muted}>Until</Text>
-            <SlotRow slots={slots} value={customEnd} onChange={setCustomEnd} />
+
+        {/* A day first, then its times, in their own box so they don't read as more days (Warren, 31 Oct). */}
+        {!fad && day !== null && (
+          <View style={styles.box}>
+            <Text style={styles.boxTitle}>What time {day === 0 ? 'today' : day === 1 ? 'tomorrow' : `on ${shortDate(dayStart(day))}`}?</Text>
+            <Chips>
+              {presets.map((p) => (
+                <Chip key={p.id} label={p.label} sub={fmtRange(p.start, p.end)} on={windowId === p.id} onPress={() => setWindowId(p.id)} />
+              ))}
+              <Chip label="Pick times" on={windowId === 'custom'} onPress={() => setWindowId('custom')} />
+            </Chips>
+            {windowId === 'custom' && (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.muted}>From</Text>
+                <SlotRow slots={slots} value={customStart} onChange={setCustomStart} />
+                <Text style={styles.muted}>Until</Text>
+                <SlotRow slots={slots} value={customEnd} onChange={setCustomEnd} />
+              </View>
+            )}
+          </View>
+        )}
+
+        {!replacing && (
+          <>
+            {!fad && <Text style={styles.muted}>Not sure which day?</Text>}
+            <Pressable
+              onPress={() => {
+                setPicking(false);
+                setFad((x) => !x);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: fad }}
+              style={[styles.fadChip, fad && styles.dayChipOn]}>
+              <TickMark />
+              <Text style={styles.dayChipText}>Find a day</Text>
+              <Text style={styles.dayChipSub}>· friends tick what suits</Text>
+            </Pressable>
+          </>
+        )}
+
+        {fad && (
+          <View style={styles.box}>
+            <Text style={styles.boxTitle}>Which dates can friends pick from?</Text>
+            <Text style={styles.muted}>Tap dates, or tap a letter to tick every one of those days.</Text>
+            <Calendar
+              selected={fadDates}
+              max={fadMax}
+              onPress={(d) => setFadDates((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d].slice(0, 60)))}
+              onWeekday={(ds) =>
+                setFadDates((x) => (ds.length && ds.every((d) => x.includes(d)) ? x.filter((y) => !ds.includes(y)) : [...new Set([...x, ...ds])].slice(0, 60)))
+              }
+            />
+            <Text style={styles.muted}>
+              {fadDates.length ? (
+                <>
+                  <Text style={styles.goesNames}>
+                    {fadDates.length} {fadDates.length === 1 ? 'date' : 'dates'}:
+                  </Text>{' '}
+                  {[...fadDates].sort().slice(0, 4).map((d) => shortDate(parseYmd(d))).join(', ')}
+                  {fadDates.length > 4 ? ' …' : ''}
+                </>
+              ) : (
+                'Pick at least one date.'
+              )}
+            </Text>
+            <Text style={styles.boxTitle}>What time of day?</Text>
+            <Chips>
+              {FAD_TIMES.map((t) => (
+                <Chip key={t.id} label={t.label} sub={t.sub} on={fadTime === t.id} onPress={() => setFadTime(t.id)} />
+              ))}
+              <Chip label="Pick times" sub={fadTime === 'custom' ? `${fmtMinutes(fadFrom)} to ${fmtMinutes(fadTo)}` : undefined} on={fadTime === 'custom'} onPress={() => setFadTime('custom')} />
+            </Chips>
+            {fadTime === 'custom' && (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.muted}>From</Text>
+                <MinuteRow value={fadFrom} onChange={setFadFrom} />
+                <Text style={styles.muted}>Until</Text>
+                <MinuteRow value={fadTo} onChange={setFadTo} />
+                {fadTo <= fadFrom && <ErrorText>The end time needs to be after the start.</ErrorText>}
+              </View>
+            )}
+            <Text style={styles.muted}>Their calendars tick the dates they&apos;re free.</Text>
           </View>
         )}
       </View>
 
-      <View style={styles.group} onLayout={(e) => (whereY.current = e.nativeEvent.layout.y)}>
-        <Label>{places.length ? `Where · optional · ${places.length} of 3` : 'Where · optional'}</Label>
-        <WherePicker userId={userId} value={places} onChange={setPlaces} onFocus={() => setTimeout(() => onScrollTo?.(whereY.current), 250)} />
-      </View>
+      {/* Find a day picks the day first; the place comes at Lock it in. */}
+      {!fad && (
+        <View style={styles.group} onLayout={(e) => (whereY.current = e.nativeEvent.layout.y)}>
+          <Label>{places.length ? `Where · optional · ${places.length} of 3` : 'Where · optional'}</Label>
+          <WherePicker userId={userId} value={places} onChange={setPlaces} onFocus={() => setTimeout(() => onScrollTo?.(whereY.current), 250)} />
+        </View>
+      )}
 
       <View style={styles.group}>
         <Label>Who</Label>
@@ -701,7 +839,17 @@ function Composer({
             <Chip key={c.id} label={c.name} on={audience.includes(c.id)} onPress={() => toggleAudience(c.id)} />
           ))}
         </Chips>
-        {audience.length > 0 && (
+        {fad && !audience.includes('everyone') && friends.length > 0 && (
+          <>
+            <Text style={styles.muted}>Or pick people</Text>
+            <Chips>
+              {friends.map((f) => (
+                <Chip key={f.id} label={f.full_name} on={people.includes(f.id)} onPress={() => setPeople((x) => (x.includes(f.id) ? x.filter((y) => y !== f.id) : [...x, f.id]))} />
+              ))}
+            </Chips>
+          </>
+        )}
+        {hasWho && (
           <Text style={styles.muted}>
             {recipients.length ? (
               <>
@@ -714,7 +862,7 @@ function Composer({
         )}
       </View>
 
-      <View style={styles.group}>
+      <View style={[styles.group, fad && { display: 'none' }]}>
         <Label>Note · optional</Label>
         <TextInput
           value={note}
@@ -741,6 +889,16 @@ function SlotRow({ slots, value, onChange }: { slots: Date[]; value: Date | null
   );
 }
 
+function MinuteRow({ value, onChange }: { value: number; onChange: (m: number) => void }) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+      {DAY_SLOTS.map((m) => (
+        <Chip key={m} label={fmtMinutes(m)} on={value === m} onPress={() => onChange(m)} />
+      ))}
+    </ScrollView>
+  );
+}
+
 // A friend's plan you're in on (31 Oct) ------------------------------------------
 // White, not cream, and led by their initial and name, so it never reads as one of yours.
 
@@ -762,16 +920,15 @@ function FriendPlanCard({
   const locked = !!beacon.locked_at;
   return (
     <View style={styles.theirs}>
+      <View style={styles.strip} />
       <Pressable
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`${name}'s ${activityTitle(beacon.activities).toLowerCase()}, ${when.text}, ${locked ? 'locked in' : "you're in"}`}
         style={styles.mineHead}>
-        <View style={styles.ownerDot}>
-          <Text style={styles.avatarText}>{name[0]}</Text>
-        </View>
-        <View style={{ flex: 1, gap: 4 }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.kind}>UP FOR SOMETHING</Text>
           <Text style={styles.mineTitle} numberOfLines={1}>
             {name}&apos;s {activityTitle(beacon.activities).toLowerCase()}
           </Text>
@@ -850,6 +1007,8 @@ function MyBeaconCard({
 
   return (
     <View style={styles.mine}>
+      {/* Coral strip: Up for something (a set time), so it never reads as a Find a day (31 Oct). */}
+      <View style={styles.strip} />
       {/* The one-line summary: what, when, how many are in. Tap to open or close. */}
       <Pressable
         onPress={onToggle}
@@ -857,7 +1016,8 @@ function MyBeaconCard({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`${activityTitle(beacon.activities)}, ${when.text}, ${locked ? 'locked in' : `${responders.length} in`}`}
         style={styles.mineHead}>
-        <View style={{ flex: 1, gap: 4 }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.kind}>UP FOR SOMETHING</Text>
           <Text style={styles.mineTitle} numberOfLines={1}>
             {activityTitle(beacon.activities)}
           </Text>
@@ -992,12 +1152,18 @@ const styles = StyleSheet.create({
   ownInput: { flex: 1, paddingVertical: 8 },
   ownAdd: { backgroundColor: colors.ink, ...border, paddingHorizontal: 14, justifyContent: 'center' },
   ownAddText: { color: colors.bg, fontWeight: '800', fontSize: 15 },
-  dayChip: { backgroundColor: colors.card, ...border, paddingVertical: 6, paddingHorizontal: 12, alignItems: 'center' },
+  dayChip: { backgroundColor: colors.card, ...border, paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center', minWidth: 62 },
+  dayWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  fadChip: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: colors.bg, ...border, borderStyle: 'dashed', paddingVertical: 8, paddingHorizontal: 12 },
+  box: { backgroundColor: colors.card, ...border, padding: 12, gap: 10 },
+  boxTitle: { fontSize: 16, fontWeight: '800' },
   dayChipOn: { backgroundColor: colors.butter, ...shadow.select },
   dayChipText: { fontSize: 15, fontWeight: '600' },
   dayChipSub: { fontSize: 12, color: colors.muted },
-  mine: { backgroundColor: colors.cream, ...border, ...shadow.card },
-  theirs: { backgroundColor: colors.card, ...border, ...shadow.card },
+  mine: { backgroundColor: colors.cream, ...border, ...shadow.card, overflow: 'hidden', paddingLeft: 8 },
+  theirs: { backgroundColor: colors.card, ...border, ...shadow.card, overflow: 'hidden', paddingLeft: 8 },
+  strip: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 8, backgroundColor: colors.accent, borderRightWidth: 2, borderRightColor: colors.ink },
+  kind: { fontSize: 10, fontWeight: '600', letterSpacing: 0.6, color: colors.muted },
   ownerDot: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   pastWrap: { alignItems: 'center', paddingTop: 4 },
