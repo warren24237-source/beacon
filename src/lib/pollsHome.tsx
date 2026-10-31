@@ -2,12 +2,12 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { ThreadInfo } from './chat';
-import { NewBadge } from './chatui';
+import { ChatButton } from './chatui';
 import { fmtDay, pollLive, tally, type Poll } from './polls';
 import { border, colors, shadow, Text } from './ui';
 
-// Find a day asks on home (decision 69). Yours go under "Your plans", ones you've answered under "You're in",
-// ones you haven't answered under "Waiting on you" (31 Oct).
+// Find a day asks on home (decision 69). Ones you haven't answered under "Needs your answer", yours under
+// "You're organising", ones you've answered under "You're going" (31 Oct).
 
 export function splitPolls(all: Poll[], userId: string) {
   // Once its locked day (or every date) has passed, an ask moves to Past plans.
@@ -37,14 +37,13 @@ export function PollRow({ poll, userId, chat }: { poll: Poll; userId: string; ch
       accessibilityLabel={`Find a day: ${poll.title}. ${sub}`}>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.kind}>{poll.locked_day ? 'FIND A DAY · LOCKED IN' : 'FIND A DAY'}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={[styles.title, { flexShrink: 1 }]} numberOfLines={1}>
-            {poll.title}
-          </Text>
-          <NewBadge info={chat} />
-        </View>
+        <Text style={styles.title} numberOfLines={1}>
+          {poll.title}
+        </Text>
         <Text style={[styles.sub, waiting && { color: colors.ink, fontWeight: '800' }]}>{sub}</Text>
       </View>
+      {/* Chat on the bar for anyone in it: you, or someone who's answered. Not before you've answered. */}
+      {!waiting && <ChatButton thread={{ pollId: poll.id }} title={poll.title} info={chat} />}
       <Text style={styles.chev}>›</Text>
     </Pressable>
   );

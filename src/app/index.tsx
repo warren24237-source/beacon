@@ -40,7 +40,7 @@ import { enableMatchAlerts } from '@/lib/push';
 import { PlaceRow, placeName, usePlaceNames, WherePicker } from '@/lib/placeui';
 import { cachedPlace, type DraftPlace } from '@/lib/places';
 import { fetchChatOverview, type ThreadInfo } from '@/lib/chat';
-import { ChatRow, chatHref, NewBadge, PlanPerson } from '@/lib/chatui';
+import { ChatButton, chatHref, PlanPerson } from '@/lib/chatui';
 import { takeTemplate, type PlanTemplate } from '@/lib/again';
 import { routeForBuzz, type BuzzData } from '@/lib/buzz';
 import { WhenTag } from '@/lib/when';
@@ -209,8 +209,8 @@ export default function Home() {
     setRefreshing(false);
   };
 
-  // Nothing leaves home while it's live (31 Oct). Yours, then ones you're in on, then ones waiting on you.
-  // Hidden ones fold away at the bottom of Waiting on you.
+  // Nothing leaves home while it's live (31 Oct): Needs your answer, You're organising, You're going.
+  // Hidden ones fold away at the bottom of Needs your answer.
   const isIn = (b: FriendBeacon) => b.responses.some((r) => r.user_id === userId);
   const joined = incoming.filter(isIn);
   const waiting = incoming.filter((b) => !isIn(b) && !hidden.includes(b.id));
@@ -271,60 +271,17 @@ export default function Home() {
         </View>
 
         <View style={{ gap: 20 }}>
-          {/* Your plans: what you lit or asked, soonest first, each folded to one line (decision 51). */}
-          {(mine.length > 0 || pollLists.plans.length > 0) && (
-            <View style={styles.group}>
-              <Label>Your plans</Label>
-              {mine.map((b) => (
-                <MyBeaconCard
-                  key={b.id}
-                  beacon={b}
-                  chat={chat[b.id]}
-                  open={openId === b.id}
-                  onToggle={() => setOpenId(openId === b.id ? null : b.id)}
-                  onChange={() => {
-                    setReplacing(b);
-                    setComposing(true);
-                  }}
-                  onOut={load}
-                />
-              ))}
-              {pollLists.plans.map((p) => (
-                <PollRow key={p.id} poll={p} userId={userId} chat={chat[p.id]} />
-              ))}
-            </View>
-          )}
-
-          {/* You're in: other people's plans you said yes to (31 Oct). White cards with their initial, so they never look like yours. */}
-          {(joined.length > 0 || pollLists.joined.length > 0) && (
-            <View style={styles.group}>
-              <Label>You&apos;re in</Label>
-              {joined.map((b) => (
-                <FriendPlanCard
-                  key={b.id}
-                  beacon={b}
-                  chat={chat[b.id]}
-                  open={openId === b.id}
-                  onToggle={() => setOpenId(openId === b.id ? null : b.id)}
-                  onDone={load}
-                />
-              ))}
-              {pollLists.joined.map((p) => (
-                <PollRow key={p.id} poll={p} userId={userId} chat={chat[p.id]} />
-              ))}
-            </View>
-          )}
-
+          {/* Needs your answer first (Warren, 31 Oct): the only list that asks something of you. */}
           {(waiting.length > 0 || pollLists.waiting.length > 0 || hiddenOnes.length > 0) && (
             <View style={styles.group}>
-              <Label>Waiting on you</Label>
+              <Label>Needs your answer</Label>
               {waiting.map((b) => (
                 <IncomingBeacon
                   key={b.id}
                   beacon={b}
                   meIn={false}
                   onDone={() => {
-                    // Said I'm in: it moves up to You're in, opened, so the chat and places are right there.
+                    // Said I'm in: it moves down to You're going, opened, so the chat and places are right there.
                     setOpenId(b.id);
                     load();
                   }}
@@ -361,6 +318,50 @@ export default function Home() {
                     <Text style={styles.actLink}>{hiddenOnes.length} hidden · Show</Text>
                   </Pressable>
                 ))}
+            </View>
+          )}
+
+          {/* You're organising: what you lit or asked, soonest first, each folded to one line (decision 51). */}
+          {(mine.length > 0 || pollLists.plans.length > 0) && (
+            <View style={styles.group}>
+              <Label>You&apos;re organising</Label>
+              {mine.map((b) => (
+                <MyBeaconCard
+                  key={b.id}
+                  beacon={b}
+                  chat={chat[b.id]}
+                  open={openId === b.id}
+                  onToggle={() => setOpenId(openId === b.id ? null : b.id)}
+                  onChange={() => {
+                    setReplacing(b);
+                    setComposing(true);
+                  }}
+                  onOut={load}
+                />
+              ))}
+              {pollLists.plans.map((p) => (
+                <PollRow key={p.id} poll={p} userId={userId} chat={chat[p.id]} />
+              ))}
+            </View>
+          )}
+
+          {/* You're going: other people's plans you said yes to (31 Oct). White cards with their initial, so they never look like yours. */}
+          {(joined.length > 0 || pollLists.joined.length > 0) && (
+            <View style={styles.group}>
+              <Label>You&apos;re going</Label>
+              {joined.map((b) => (
+                <FriendPlanCard
+                  key={b.id}
+                  beacon={b}
+                  chat={chat[b.id]}
+                  open={openId === b.id}
+                  onToggle={() => setOpenId(openId === b.id ? null : b.id)}
+                  onDone={load}
+                />
+              ))}
+              {pollLists.joined.map((p) => (
+                <PollRow key={p.id} poll={p} userId={userId} chat={chat[p.id]} />
+              ))}
             </View>
           )}
 
@@ -776,17 +777,17 @@ function FriendPlanCard({
           </Text>
           <View style={styles.titleRow}>
             <WhenTag text={when.text} live={when.live} />
-            {!open && <NewBadge info={chat} />}
+            <View style={[styles.status, styles.statusSmall, locked ? styles.statusLocked : styles.statusIn]}>
+              <Text style={[styles.statusTextSmall, locked && { color: colors.butter }]}>{locked ? 'Locked in' : 'Going'}</Text>
+            </View>
           </View>
         </View>
-        <View style={[styles.status, locked ? styles.statusLocked : styles.statusIn]}>
-          <Text style={[styles.statusText, locked && { color: colors.butter }]}>{locked ? 'Locked in' : "You're in"}</Text>
-        </View>
+        <ChatButton thread={{ beaconId: beacon.id }} title={`${name}'s ${activityTitle(beacon.activities).toLowerCase()}`} info={chat} />
         <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
       </Pressable>
       {open && (
         <View style={styles.mineBody}>
-          <IncomingBeacon beacon={beacon} meIn bare chat={chat} onDone={onDone} />
+          <IncomingBeacon beacon={beacon} meIn bare onDone={onDone} />
         </View>
       )}
     </View>
@@ -860,9 +861,8 @@ function MyBeaconCard({
           <Text style={styles.mineTitle} numberOfLines={1}>
             {activityTitle(beacon.activities)}
           </Text>
-          <View style={styles.titleRow}>
+          <View style={{ flexDirection: 'row' }}>
             <WhenTag text={when.text} live={when.live} />
-            {!open && <NewBadge info={chat} />}
           </View>
         </View>
         <View style={[styles.status, locked ? styles.statusLocked : responders.length ? styles.statusIn : styles.statusNone]}>
@@ -870,6 +870,8 @@ function MyBeaconCard({
             {locked ? 'Locked in' : responders.length ? `${responders.length} in` : 'Nobody yet'}
           </Text>
         </View>
+        {/* Chat on the bar (31 Oct), once anyone's in to chat with. */}
+        {responders.length > 0 && <ChatButton thread={{ beaconId: beacon.id }} title={activityTitle(beacon.activities)} info={chat} />}
         <Text style={styles.chevron}>{open ? '▴' : '▾'}</Text>
       </Pressable>
 
@@ -877,8 +879,6 @@ function MyBeaconCard({
         <View style={styles.mineBody}>
           {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
           {locked && <Text style={styles.muted}>Locked in. Only {onlyWho} can see it, and nobody new can join.</Text>}
-          {/* Chat with everyone who's in (decision 79). Nobody in yet means nobody to chat with. */}
-          {responders.length > 0 && <ChatRow thread={{ beaconId: beacon.id }} title={activityTitle(beacon.activities)} info={chat} />}
           {places.length > 0 && (
             <View style={{ gap: 8 }}>
               {responders.length > 0 && <Label>{locked ? 'Where' : 'Who prefers where'}</Label>}
@@ -1010,6 +1010,8 @@ const styles = StyleSheet.create({
   statusLocked: { backgroundColor: colors.ink, ...shadow.select },
   statusNone: { borderColor: colors.muted, borderStyle: 'dashed' },
   statusText: { fontSize: 14, fontWeight: '800' },
+  statusSmall: { paddingHorizontal: 6, paddingVertical: 0, boxShadow: 'none' },
+  statusTextSmall: { fontSize: 12, fontWeight: '800' },
   chevron: { fontSize: 16, color: colors.muted, width: 14, textAlign: 'center' },
   mineTitle: { fontSize: 18, fontWeight: '800', flexShrink: 1 },
   mineActs: { flexDirection: 'row', justifyContent: 'flex-end', gap: 18 },

@@ -5,8 +5,7 @@ import { useAuth } from './auth';
 import { activityPhrase, type BeaconSummary, fetchFriendsBeacons, fetchLockedInWith, fetchSummary, type LockedPerson, whenLabel } from './beacon';
 import type { DraftPlace } from './places';
 import { PlaceRow, placeName, PrefPicker, usePlaceNames, WherePicker } from './placeui';
-import type { ThreadInfo } from './chat';
-import { ChatRow, PlanPerson } from './chatui';
+import { PlanPerson } from './chatui';
 import { WhenTag } from './when';
 import { supabase } from './supabase';
 import { border, Button, colors, ErrorText, shadow, Text } from './ui';
@@ -24,7 +23,6 @@ export function IncomingBeacon({
   onUnhide,
   hidden,
   bare,
-  chat,
 }: {
   beacon: FriendBeacon;
   meIn: boolean;
@@ -33,7 +31,6 @@ export function IncomingBeacon({
   onUnhide?: () => void;
   hidden?: boolean;
   bare?: boolean;
-  chat?: ThreadInfo;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -106,7 +103,6 @@ export function IncomingBeacon({
           <Text style={styles.in}>{going ? `At ${placeName(going) || 'the place above'}. ` : ''}{others.length ? `You're in with ${others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}` : others[0]}.` : `It's you and ${name}.`}</Text>
           {!going && places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
           {!going && <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />}
-          <ChatRow thread={{ beaconId: beacon.id }} title={`${name}'s ${activityPhrase(beacon.activities)}`} info={chat} />
           <Text style={styles.small}>Who&apos;s in</Text>
           {people.map((p) => (
             <PlanPerson key={p.id} name={p.full_name} phone={p.phone_number} />
@@ -116,7 +112,6 @@ export function IncomingBeacon({
       ) : meIn ? (
         <>
           <Text style={styles.in}>You&apos;re in. {name} knows.</Text>
-          <ChatRow thread={{ beaconId: beacon.id }} title={`${name}'s ${activityPhrase(beacon.activities)}`} info={chat} />
           {places.length > 0 && <PrefPicker beaconId={beacon.id} places={places} mine={myPref} onSaved={onDone} />}
           <SuggestPlace beaconId={beacon.id} userId={userId} mine={!!mine} onSaved={onDone} />
           <PlanPerson name={name} phone={phone} />

@@ -48,6 +48,29 @@ export function ChatRow({ thread, title, info }: { thread: Thread; title: string
   );
 }
 
+/**
+ * The chat button on a plan's folded bar (Warren, 31 Oct: "the chat button needs to exist on the collapsed bar").
+ * A square speech bubble with a coral count when there's something new. Opens the chat straight away.
+ */
+export function ChatButton({ thread, title, info }: { thread: Thread; title: string; info?: ThreadInfo }) {
+  const n = info?.unread ?? 0;
+  return (
+    <Pressable
+      onPress={() => router.push(chatHref(thread, title) as never)}
+      accessibilityRole="button"
+      accessibilityLabel={`Chat${n ? `, ${newCount(n)}` : ''}`}
+      hitSlop={6}
+      style={({ pressed }) => [styles.chatBtn, pressed && styles.pressed]}>
+      <MaterialCommunityIcons name="forum-outline" size={20} color={colors.ink} />
+      {n > 0 && (
+        <View style={styles.dot}>
+          <Text style={styles.dotText}>{n > 9 ? '9+' : n}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
 /** A small coral "2 new" next to a plan's title when it's folded. */
 export function NewBadge({ info }: { info?: ThreadInfo }) {
   const n = newCount(info?.unread ?? 0);
@@ -119,6 +142,9 @@ export function PlanPerson({ name, phone }: { name: string; phone: string | null
 }
 
 const styles = StyleSheet.create({
+  chatBtn: { width: 38, height: 38, backgroundColor: colors.card, ...border, boxShadow: `2px 2px 0px ${colors.ink}`, alignItems: 'center', justifyContent: 'center' },
+  dot: { position: 'absolute', top: -9, right: -9, minWidth: 20, height: 20, borderRadius: 10, backgroundColor: colors.accent, borderWidth: 1.5, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  dotText: { fontSize: 11, fontWeight: '800' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bg, ...border, ...shadow.select, paddingVertical: 10, paddingHorizontal: 12 },
   pressed: { boxShadow: 'none', transform: [{ translateX: 3 }, { translateY: 3 }] },
   title: { fontSize: 16, fontWeight: '800' },
