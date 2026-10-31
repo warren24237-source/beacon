@@ -3,14 +3,14 @@
 Read `AGENTS.md` too: it has the Expo rules (SDK 58, check versioned docs, `npx expo install`).
 
 ## What this is
-One tap tells the friends you choose, across separate circles, that you're free. Friends tap "I'm in" and you sort it in your own messaging app. Solo fun project by Warren Porter. Warren is not learning to code: Claude writes the code, Warren tests on his Android phone and steers the product.
+One tap tells the friends you choose, across separate circles, that you're up for something (or asks them to find a day). Friends tap "I'm in" and you sort it in the plan's chat. Solo fun project by Warren Porter. Warren is not learning to code: Claude writes the code, Warren tests on his Android phone and steers the product.
 
 Project docs (brief, decisions, roadmap, open questions) and the **current status / next steps** live in Warren's OneDrive Beacon folder `CLAUDE.md`, not this repo. If that folder isn't connected, ask Warren to connect it.
 
 ## Product rules (don't break without a logged decision)
-1. No in-app chat. Every conversation hands off straight to the person: Message (`sms:`, the phone picks its app) or Call (`tel:`), via `src/lib/reply.tsx` (decision 52). Not tied to WhatsApp. No group picker.
+1. Chat only on a plan, for that plan (decision 79, replacing "no in-app chat"): text only, read only when the plan ends, deleted 7 days later (`src/app/chat.tsx`, migration 0023). One-to-one hands off to the person: Message (`sms:`) or Call (`tel:`), via `src/lib/reply.tsx` and `PlanPerson` in `src/lib/chatui.tsx` (decisions 52, 82). No photos.
 2. 5 seconds per session, max. Fewer screens, fewer taps.
-3. Low frequency by design. No streaks, nags or feeds.
+3. Low frequency by design. No streaks, nags or feeds. The app never nags; reminders only go to people who said yes (decision 78).
 4. You choose who hears. A beacon reaches only the friends or circles picked each time. Circles are private to their owner.
 
 ## Decided so far
@@ -22,7 +22,8 @@ Project docs (brief, decisions, roadmap, open questions) and the **current statu
 - No location in v1. Push notifications on a match (needs an EAS development build, not Expo Go).
 
 ## Layout
-- `src/app/`: screens (Expo Router). `join` → `phone` (only if missing) → `index` (home) and `friends`, guarded in `_layout.tsx`.
+- `src/app/`: screens (Expo Router). `join` → `phone` (only if missing) → `index` (home: the one sheet from the lamp, Needs your answer, You're organising, You're going), `friends`, `poll/[id]` (Find a day), `chat`, `past`, guarded in `_layout.tsx`.
+- Where a tapped buzz goes: `src/lib/buzz.ts` (tested). Add any new push `type` there.
 - `src/lib/`: Supabase client, auth context, shared UI.
 - `supabase/migrations/`: SQL, applied in order via the Supabase Management API (Claude holds a token per session) or the SQL Editor.
 - Updates: `eas update --channel production --environment production --platform android`, then the same with `--platform ios` (`all` fails: it also exports web, which crashes on AsyncStorage), with Warren's OK (decision 68: one lane, no preview). Native changes need `eas build --profile production` for Android and iOS, then submit to Play internal testing and TestFlight, then republish the latest update to `production`.
@@ -32,5 +33,7 @@ Project docs (brief, decisions, roadmap, open questions) and the **current statu
 - Run `npm run check` (typecheck, lint, tests) before every commit. GitHub runs the same on every push (`.github/workflows/checks.yml`).
 - Pure logic (dates, times, wording, phone numbers) lives in import-free files (`src/lib/time.ts`, `src/lib/phone.ts`) with tests in `src/lib/__tests__/`. Add a test when fixing a bug there.
 - Lanes: `production` only (Play internal testing and TestFlight installs). `preview` was retired 27 Oct 2026 (decision 68); its phones stay frozen on their last update. The `staging` and `preview` build profiles stay in eas.json, unused. Database migrations have no lanes: they reach every installed version at once, so keep them backward compatible.
+- Screenshots: `npx expo export -p web` with `web.output` set to "single" for the export only (put it back after) and `EXPO_PUBLIC_SUPABASE_URL=http://mock.local`, then Playwright at 360px with every `http://mock.local/**` request answered with made-up data. Never touch the real database.
+- Database jobs (pg_cron): `beacon-reminders` every 5 minutes, `delete-old-chat` hourly.
 - Never commit `.env`.
 - Never use em dashes in copy or docs. Use a full stop or a comma.
