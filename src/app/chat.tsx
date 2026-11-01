@@ -1,10 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, KeyboardAvoidingView, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth';
-import { blockUser, fetchMessages, markRead, MAX_MESSAGE, reportMessage, sendMessage, subscribeToThread, type ChatMessage, type Thread } from '@/lib/chat';
+import { blockUser, fetchMessages, fetchMuted, markRead, MAX_MESSAGE, reportMessage, sendMessage, setMuted, subscribeToThread, threadId, type ChatMessage, type Thread } from '@/lib/chat';
 import { placeName, usePlaceNames } from '@/lib/placeui';
 import { usePlacesVersion, type BeaconPlace } from '@/lib/places';
 import { fetchPoll } from '@/lib/polls';
@@ -28,6 +29,25 @@ export default function ChatScreen() {
   const [error, setError] = useState('');
   const [held, setHeld] = useState<ChatMessage | null>(null);
   const [toast, setToast] = useState('');
+  // Mute (decision 88): every message buzzes unless you mute this chat with the bell, top right.
+  const [muted, setMutedState] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetchMuted(threadId(thread)).then((m) => live && setMutedState(m));
+    return () => {
+      live = false;
+    };
+  }, [thread]);
+  const toggleMute = async () => {
+    const next = !muted;
+    setMutedState(next);
+    const { error } = await setMuted(thread, next);
+    if (error) {
+      setMutedState(!next);
+      return setError(error.message);
+    }
+    setToast(next ? 'Muted. No buzzes from this chat.' : 'Unmuted. Every message buzzes.');
+  };
 
   // Still open for messages? A beacon until it ends or is put out; a Find a day until its day (or last date) has passed.
   const checkOpen = useCallback(async () => {
@@ -120,8 +140,18 @@ export default function ChatScreen() {
         <View style={styles.bar}>
           <BackBar
             title={title || 'Chat'}
-            sub={thread.beaconId ? 'Only the people who are in can see this' : 'Everyone asked can see this'}
+            sub={thread.beaconId ? 'Only people who are in see this' : 'Everyone asked sees this'}
             onBack={goBack}
+            right={
+              <Pressable
+                onPress={toggleMute}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={muted ? 'Unmute this chat' : 'Mute this chat'}
+                style={({ pressed }) => [styles.bell, muted && styles.bellOff, pressed && styles.pressed]}>
+                <Ionicons name={muted ? 'notifications-off-outline' : 'notifications-outline'} size={20} color={colors.ink} />
+              </Pressable>
+            }
           />
         </View>
 
@@ -228,6 +258,8 @@ const styles = StyleSheet.create({
   send: { backgroundColor: colors.accent, ...border, ...shadow.select, paddingVertical: 11, paddingHorizontal: 14 },
   sendText: { fontSize: 16, fontWeight: '800' },
   pressed: { boxShadow: 'none', transform: [{ translateX: 2 }, { translateY: 2 }] },
+  bell: { width: 40, height: 40, backgroundColor: colors.card, ...border, boxShadow: `2px 2px 0px ${colors.ink}`, alignItems: 'center', justifyContent: 'center' },
+  bellOff: { backgroundColor: colors.skyDeep },
   ended: { textAlign: 'center', color: colors.muted, fontSize: 14, paddingVertical: 14, borderTopWidth: 2, borderTopColor: colors.ink },
   toast: { textAlign: 'center', fontSize: 14, fontWeight: '800', paddingVertical: 6 },
   h2: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
