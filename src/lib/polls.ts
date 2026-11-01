@@ -56,7 +56,10 @@ export const TIME_OPTIONS = [
 
 /** Half-hour times across the day, as minutes after midnight. */
 export const DAY_SLOTS = Array.from({ length: 36 }, (_, i) => 6 * 60 + i * 30); // 6am to 11:30pm
+/** Until times: half an hour later up to midnight (Warren, 1 Nov: Until stopped at 11:30pm). */
+export const UNTIL_SLOTS = [...DAY_SLOTS.slice(1), 24 * 60];
 export function fmtMinutes(m: number): string {
+  if (m >= 24 * 60) return 'midnight';
   let h = Math.floor(m / 60);
   const mm = m % 60;
   const ap = h >= 12 ? 'pm' : 'am';

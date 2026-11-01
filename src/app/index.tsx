@@ -35,7 +35,8 @@ import {
 import { BeaconGlow, LampButton, UnlitLamp } from '@/lib/glow';
 import { IncomingBeacon, type FriendBeacon } from '@/lib/incoming';
 import { Calendar } from '@/lib/calendar';
-import { DAY_SLOTS, fetchPolls, fmtMinutes, parseYmd, ymd, type Poll } from '@/lib/polls';
+import { calendarAllowed, checkDates, type DayCheck } from '@/lib/busy';
+import { DAY_SLOTS, fetchPolls, fmtMinutes, parseYmd, UNTIL_SLOTS, weeklyDates, ymd, type Poll } from '@/lib/polls';
 import { PollRow, splitPolls, TickMark } from '@/lib/pollsHome';
 import { Sheet } from '@/lib/sheet';
 import { enableMatchAlerts } from '@/lib/push';
@@ -75,7 +76,7 @@ type FadTimeId = 'any' | 'custom' | (typeof DAY_BLOCKS)[number]['id'];
 // Any time, then the same six blocks a beacon uses (31 Oct).
 const FAD_TIMES: { id: Exclude<FadTimeId, 'custom'>; label: string; sub?: string; start: number | null; end: number | null }[] = [
   { id: 'any', label: 'Any time', start: null, end: null },
-  ...DAY_BLOCKS.map((b) => ({ id: b.id, label: b.label, sub: `${fmtMinutes(b.start)} to ${b.end >= 1440 ? 'midnight' : fmtMinutes(b.end)}`, start: b.start, end: Math.min(b.end, 1439) })),
+  ...DAY_BLOCKS.map((b) => ({ id: b.id, label: b.label, sub: `${fmtMinutes(b.start)} to ${b.end >= 1440 ? 'midnight' : fmtMinutes(b.end)}`, start: b.start, end: b.end })),
 ];
 function fadWindowOf(id: FadTimeId, from: number, to: number): { label: string; start: number | null; end: number | null } {
   if (id === 'custom') return { label: `${fmtMinutes(from)} to ${fmtMinutes(to)}`, start: from, end: to };
@@ -497,6 +498,14 @@ function Composer({
   const [fad, setFad] = useState(false);
   const [picking, setPicking] = useState(false);
   const [fadDates, setFadDates] = useState<string[]>([]);
+  // Find a day's dates (Warren, 1 Nov): Pick days (e.g. Sat) between two dates, or Pick dates on a calendar.
+  const [fadMode, setFadMode] = useState<'days' | 'dates'>('days');
+  const [fadDays, setFadDays] = useState<number[]>([]);
+  const [rangeFrom, setRangeFrom] = useState(() => ymd(dayStart(0)));
+  const [rangeTo, setRangeTo] = useState(() => ymd(dayStart(56)));
+  const [editingRange, setEditingRange] = useState<'from' | 'to' | null>(null);
+  const [fadName, setFadName] = useState('');
+  const [clashes, setClashes] = useState<Record<string, DayCheck> | null>(null);
   const [fadTime, setFadTime] = useState<FadTimeId | null>(null);
   const [fadFrom, setFadFrom] = useState(18 * 60);
   const [fadTo, setFadTo] = useState(21 * 60);
@@ -589,8 +598,27 @@ function Composer({
 
   const chosen = windowId === 'custom' ? { start: customStart, end: customEnd } : presets.find((p) => p.id === windowId);
   const fadWindow = fadTime ? fadWindowOf(fadTime, fadFrom, fadTo) : null;
+  const fadList = useMemo(
+    () => (fadMode === 'dates' ? [...fadDates].sort() : weeklyDates(fadDays, rangeFrom, rangeTo)),
+    [fadMode, fadDates, fadDays, rangeFrom, rangeTo]
+  );
+  // Your own calendar while you pick (as the old Find a day screen did), if you've allowed it. Never leaves the phone.
+  const fadKey = `${fad}|${fadList.join(',')}|${fadWindow?.start}-${fadWindow?.end}`;
+  useEffect(() => {
+    let live = true;
+    if (!fad || !fadList.length) return;
+    calendarAllowed().then(async (ok) => {
+      const res = ok ? await checkDates(fadList, fadWindow?.start ?? null, fadWindow?.end ?? null) : null;
+      if (live) setClashes(res);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fadKey]);
+  const busyDates = clashes ? fadList.filter((d) => clashes[d]?.busy.length) : [];
   const hasWhen = fad
-    ? fadDates.length > 0 && !!fadWindow && (fadTime !== 'custom' || fadTo > fadFrom)
+    ? fadList.length > 0 && !!fadWindow && (fadTime !== 'custom' || fadTo > fadFrom)
     : !!chosen?.start && !!chosen?.end && chosen.end > chosen.start;
 
   // Tell the footer whether the lamp can light, and what to say above it.
@@ -600,7 +628,7 @@ function Composer({
   const preview = !ready
     ? `Pick ${missing.length > 1 ? `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}` : missing[0]}.`
     : fad
-      ? `${myName || 'You'} wants to find a day for ${activityPhrase(acts)}. Tap when you're free.`
+      ? `${myName || 'You'} wants to find a day for ${(fadName.trim() || activityPhrase(acts)).toLowerCase()}. Tap when you're free.`
       : beaconPreview(myName || 'You', acts, chosen!.start!, chosen!.end!);
   useEffect(() => {
     onState(ready, preview);
@@ -618,8 +646,8 @@ function Composer({
       enableMatchAlerts(userId);
       const all = audience.includes('everyone');
       const { data, error } = await supabase.rpc('create_poll', {
-        p_title: activityTitle(acts).slice(0, 40),
-        p_dates: [...fadDates].sort(),
+        p_title: (fadName.trim() || activityTitle(acts)).slice(0, 40),
+        p_dates: fadList,
         p_time_label: fadWindow.label,
         p_all: all,
         p_circle_ids: all ? [] : audience,
@@ -728,8 +756,11 @@ function Composer({
             <Text style={styles.dayChipText}>{!fad && day !== null && day > 6 ? shortDate(dayStart(day)) : 'Pick a date'}</Text>
             <Text style={styles.dayChipSub}>up to 3 months</Text>
           </Pressable>
-          {/* Find a day sits with the days, never under the times (Warren, 31 Oct). */}
-          {!replacing && (
+        </View>
+        {/* The only branch (Warren, 1 Nov): straight after the days, above any times. */}
+        {!replacing && (
+          <>
+            {!fad && <Text style={styles.muted}>Not sure which day?</Text>}
             <Pressable
               onPress={() => {
                 setPicking(false);
@@ -737,15 +768,13 @@ function Composer({
               }}
               accessibilityRole="button"
               accessibilityState={{ selected: fad }}
-              style={[styles.dayChip, styles.fadChip, fad && styles.dayChipOn]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <TickMark />
-                <Text style={styles.dayChipText}>Find a day</Text>
-              </View>
-              <Text style={styles.dayChipSub}>friends pick</Text>
+              style={[styles.fadChip, fad && styles.dayChipOn]}>
+              <TickMark />
+              <Text style={styles.dayChipText}>Find a day</Text>
+              <Text style={styles.dayChipSub}>· friends tick what suits</Text>
             </Pressable>
-          )}
-        </View>
+          </>
+        )}
         {picking && !fad && (
           <Calendar
             selected={day !== null && day > 6 ? [ymd(dayStart(day))] : []}
@@ -779,7 +808,7 @@ function Composer({
                 <Text style={styles.muted}>From</Text>
                 <SlotRow slots={slots} value={customStart} onChange={setCustomStart} />
                 <Text style={styles.muted}>Until</Text>
-                <SlotRow slots={slots} value={customEnd} onChange={setCustomEnd} />
+                <SlotRow slots={day === null ? slots : [...slots.slice(1), dayStart(day + 1)]} value={customEnd} onChange={setCustomEnd} />
               </View>
             )}
           </View>
@@ -788,28 +817,80 @@ function Composer({
         {fad && (
           <View style={styles.box}>
             <Text style={styles.boxTitle}>Which dates can friends pick from?</Text>
-            <Text style={styles.muted}>Tap dates, or tap a letter to tick every one of those days.</Text>
-            <Calendar
-              selected={fadDates}
-              max={fadMax}
-              onPress={(d) => setFadDates((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d].slice(0, 60)))}
-              onWeekday={(ds) =>
-                setFadDates((x) => (ds.length && ds.every((d) => x.includes(d)) ? x.filter((y) => !ds.includes(y)) : [...new Set([...x, ...ds])].slice(0, 60)))
-              }
-            />
+            <Chips>
+              <Chip label="Pick days" on={fadMode === 'days'} onPress={() => setFadMode('days')} />
+              <Chip label="Pick dates" on={fadMode === 'dates'} onPress={() => setFadMode('dates')} />
+            </Chips>
+            {fadMode === 'days' ? (
+              <>
+                <Chips>
+                  {[1, 2, 3, 4, 5, 6, 0].map((d) => (
+                    <Chip
+                      key={d}
+                      label={DOW3[d]}
+                      on={fadDays.includes(d)}
+                      onPress={() => setFadDays((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d]))}
+                    />
+                  ))}
+                </Chips>
+                <Text style={styles.muted}>Between</Text>
+                <Chips>
+                  <Chip label="From" sub={shortDate(parseYmd(rangeFrom))} on={editingRange === 'from'} onPress={() => setEditingRange(editingRange === 'from' ? null : 'from')} />
+                  <Chip label="Until" sub={shortDate(parseYmd(rangeTo))} on={editingRange === 'to'} onPress={() => setEditingRange(editingRange === 'to' ? null : 'to')} />
+                </Chips>
+                {editingRange && (
+                  <Calendar
+                    key={editingRange}
+                    selected={[editingRange === 'from' ? rangeFrom : rangeTo]}
+                    max={fadMax}
+                    onPress={(d) => {
+                      if (editingRange === 'from') {
+                        setRangeFrom(d);
+                        if (d > rangeTo) setRangeTo(d);
+                      } else setRangeTo(d < rangeFrom ? rangeFrom : d);
+                      setEditingRange(null);
+                    }}
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <Text style={styles.muted}>Tap dates, or tap a letter to tick every one of those days.</Text>
+                <Calendar
+                  selected={fadDates}
+                  max={fadMax}
+                  onPress={(d) => setFadDates((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d].slice(0, 60)))}
+                  onWeekday={(ds) =>
+                    setFadDates((x) => (ds.length && ds.every((d) => x.includes(d)) ? x.filter((y) => !ds.includes(y)) : [...new Set([...x, ...ds])].slice(0, 60)))
+                  }
+                />
+              </>
+            )}
             <Text style={styles.muted}>
-              {fadDates.length ? (
+              {fadList.length ? (
                 <>
                   <Text style={styles.goesNames}>
-                    {fadDates.length} {fadDates.length === 1 ? 'date' : 'dates'}:
+                    {fadList.length} {fadList.length === 1 ? 'date' : 'dates'}:
                   </Text>{' '}
-                  {[...fadDates].sort().slice(0, 4).map((d) => shortDate(parseYmd(d))).join(', ')}
-                  {fadDates.length > 4 ? ' …' : ''}
+                  {fadList.slice(0, 4).map((d) => shortDate(parseYmd(d))).join(', ')}
+                  {fadList.length > 4 ? ' …' : ''}
                 </>
+              ) : fadMode === 'days' ? (
+                'Pick a day of the week.'
               ) : (
                 'Pick at least one date.'
               )}
             </Text>
+            {clashes && fadList.length > 0 && (
+              <Text style={busyDates.length ? styles.busyText : styles.muted}>
+                {busyDates.length
+                  ? `Your calendar: busy on ${busyDates
+                      .slice(0, 3)
+                      .map((d) => `${shortDate(parseYmd(d))} (${clashes[d].busy[0]})`)
+                      .join(', ')}${busyDates.length > 3 ? ` and ${busyDates.length - 3} more` : ''}`
+                  : 'Your calendar: free on all of these.'}
+              </Text>
+            )}
             <Text style={styles.boxTitle}>What time of day?</Text>
             <Chips>
               {FAD_TIMES.map((t) => (
@@ -822,7 +903,7 @@ function Composer({
                 <Text style={styles.muted}>From</Text>
                 <MinuteRow value={fadFrom} onChange={setFadFrom} />
                 <Text style={styles.muted}>Until</Text>
-                <MinuteRow value={fadTo} onChange={setFadTo} />
+                <MinuteRow value={fadTo} onChange={setFadTo} until />
                 {fadTo <= fadFrom && <ErrorText>The end time needs to be after the start.</ErrorText>}
               </View>
             )}
@@ -830,6 +911,15 @@ function Composer({
           </View>
         )}
       </View>
+
+      {/* Find a day can have its own name ("Christmas drinks"), otherwise it's named after the activity. */}
+      {fad && (
+        <View style={styles.group}>
+          <Label>Name it · optional</Label>
+          <TextInput value={fadName} onChangeText={setFadName} maxLength={40} placeholder="e.g. Christmas drinks" placeholderTextColor={colors.muted} style={styles.input} />
+          <Text style={styles.muted}>Otherwise it&apos;s called {acts.length ? activityPhrase(acts) : 'what you picked'}.</Text>
+        </View>
+      )}
 
       {/* Find a day picks the day first; the place comes at Lock it in. */}
       {!fad && (
@@ -897,10 +987,10 @@ function SlotRow({ slots, value, onChange }: { slots: Date[]; value: Date | null
   );
 }
 
-function MinuteRow({ value, onChange }: { value: number; onChange: (m: number) => void }) {
+function MinuteRow({ value, onChange, until }: { value: number; onChange: (m: number) => void; until?: boolean }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-      {DAY_SLOTS.map((m) => (
+      {(until ? UNTIL_SLOTS : DAY_SLOTS).map((m) => (
         <Chip key={m} label={fmtMinutes(m)} on={value === m} onPress={() => onChange(m)} />
       ))}
     </ScrollView>
@@ -1170,7 +1260,8 @@ const styles = StyleSheet.create({
   ownAddText: { color: colors.bg, fontWeight: '800', fontSize: 15 },
   dayChip: { backgroundColor: colors.card, ...border, paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center', minWidth: 62 },
   dayWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  fadChip: { borderStyle: 'dashed', backgroundColor: colors.bg },
+  fadChip: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: colors.bg, ...border, borderStyle: 'dashed', paddingVertical: 8, paddingHorizontal: 12 },
+  busyText: { color: colors.error, fontSize: 14, fontWeight: '600' },
   box: { backgroundColor: colors.card, ...border, padding: 12, gap: 10 },
   boxTitle: { fontSize: 16, fontWeight: '800' },
   dayChipOn: { backgroundColor: colors.butter, ...shadow.select },
