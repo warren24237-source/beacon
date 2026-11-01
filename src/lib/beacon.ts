@@ -94,13 +94,17 @@ export async function fetchCircles(): Promise<Circle[]> {
   return (data ?? []).map((c: any) => ({ id: c.id, name: c.name, member_ids: c.circle_members.map((m: any) => m.member_id) }));
 }
 
-export type MyBeacon = Beacon & { responses: { user_id: string; profiles: { full_name: string; phone_number: string | null } | null }[] };
+export type MyBeacon = Beacon & {
+  responses: { user_id: string; profiles: { full_name: string; phone_number: string | null } | null }[];
+  /** No thanks (decision 90): only the host sees these. */
+  declines?: { user_id: string; profiles: { full_name: string } | null }[];
+};
 
 /** All your beacons that haven't gone out, soonest first (decision 51). */
 export async function fetchMyBeacons(userId: string): Promise<MyBeacon[]> {
   const { data } = await supabase
     .from('beacons')
-    .select('*, responses(user_id, created_at, profiles(full_name, phone_number)), beacon_places(position, place_id, label, starred, suggested_by), place_prefs(user_id, position)')
+    .select('*, responses(user_id, created_at, profiles(full_name, phone_number)), declines(user_id, profiles(full_name)), beacon_places(position, place_id, label, starred, suggested_by), place_prefs(user_id, position)')
     .eq('owner_id', userId)
     .eq('is_active', true)
     .gt('end_time', new Date().toISOString())
@@ -133,10 +137,11 @@ export function namesList(names: string[]): string {
 export async function fetchFriendsBeacons(userId: string) {
   const { data } = await supabase
     .from('beacons')
-    .select('*, owner:profiles!beacons_owner_id_fkey(full_name, phone_number), responses(user_id), beacon_places(position, place_id, label, starred, suggested_by), place_prefs(user_id, position)')
+    .select('*, owner:profiles!beacons_owner_id_fkey(full_name, phone_number), responses(user_id), declines(user_id), beacon_places(position, place_id, label, starred, suggested_by), place_prefs(user_id, position)')
     .neq('owner_id', userId)
     .eq('is_active', true)
     .gt('end_time', new Date().toISOString())
     .order('start_time', { ascending: true });
-  return (data ?? []) as (Beacon & { responses: { user_id: string }[] })[];
+  // declines: only your own No thanks comes back (row rules).
+  return (data ?? []) as (Beacon & { responses: { user_id: string }[]; declines?: { user_id: string }[] })[];
 }

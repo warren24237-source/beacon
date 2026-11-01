@@ -23,6 +23,8 @@ export function IncomingBeacon({
   onUnhide,
   hidden,
   bare,
+  declined,
+  onNoThanks,
 }: {
   beacon: FriendBeacon;
   meIn: boolean;
@@ -31,6 +33,9 @@ export function IncomingBeacon({
   onUnhide?: () => void;
   hidden?: boolean;
   bare?: boolean;
+  /** You said No thanks (decision 90). I'm in still works. */
+  declined?: boolean;
+  onNoThanks?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -119,8 +124,26 @@ export function IncomingBeacon({
         </>
       ) : (
         <View style={styles.actions}>
-          <Button label="I'm in" variant="accent" compact onPress={imIn} busy={busy} />
-          {hidden ? (
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <Button label="I'm in" variant="accent" compact onPress={imIn} busy={busy} />
+            {/* No thanks (decision 90): tells the host only, no buzz. */}
+            {!declined && onNoThanks && (
+              <Button
+                label="No thanks"
+                secondary
+                compact
+                onPress={async () => {
+                  setError('');
+                  const { error } = await supabase.rpc('no_thanks', { p_beacon_id: beacon.id });
+                  if (error) return setError(error.message);
+                  onNoThanks();
+                }}
+              />
+            )}
+          </View>
+          {declined ? (
+            <Text style={styles.tag}>You said no thanks</Text>
+          ) : hidden ? (
             onUnhide ? (
               <Pressable onPress={onUnhide} hitSlop={12} accessibilityRole="button" accessibilityLabel={`Unhide ${name}'s beacon`}>
                 <Text style={styles.link}>Unhide</Text>
@@ -138,7 +161,9 @@ export function IncomingBeacon({
           ? 'Only the people who are in can see this.'
           : meIn
             ? "Everyone it went to sees who's in, by first name. Only people who are in see the chat."
-            : "Everyone it went to sees who it went to and who's in, by first name. Hiding is silent."}
+            : declined
+              ? `Only ${name} knows you said no thanks. Changed your mind? I'm in still works.`
+              : `No thanks tells only ${name}. Hide is silent.`}
       </Text>
     </View>
   );

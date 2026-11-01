@@ -222,8 +222,11 @@ export default function Home() {
   // Hidden ones fold away at the bottom of Needs your answer.
   const isIn = (b: FriendBeacon) => b.responses.some((r) => r.user_id === userId);
   const joined = incoming.filter(isIn);
-  const waiting = incoming.filter((b) => !isIn(b) && !hidden.includes(b.id));
-  const hiddenOnes = incoming.filter((b) => !isIn(b) && hidden.includes(b.id));
+  // No thanks (decision 90) folds away with the hidden ones; I'm in still works from there.
+  const declined = (b: FriendBeacon) => !!b.declines?.some((d) => d.user_id === userId);
+  const waiting = incoming.filter((b) => !isIn(b) && !hidden.includes(b.id) && !declined(b));
+  const hiddenOnes = incoming.filter((b) => !isIn(b) && (hidden.includes(b.id) || declined(b)));
+  const declinedCount = hiddenOnes.filter(declined).length;
   const pollLists = splitPolls(polls, userId);
   const alone =
     !mine.length && !pollLists.plans.length && !joined.length && !pollLists.joined.length && !waiting.length && !pollLists.waiting.length && !hiddenOnes.length;
@@ -296,6 +299,7 @@ export default function Home() {
                     setHiddenIds((h) => [...h, b.id]);
                     syncHidden(b.id, true);
                   }}
+                  onNoThanks={load}
                 />
               ))}
               {pollLists.waiting.map((p) => (
@@ -310,6 +314,7 @@ export default function Home() {
                           beacon={b}
                           meIn={false}
                           hidden
+                          declined={declined(b)}
                           onDone={() => {
                             setHiddenIds((h) => h.filter((x) => x !== b.id));
                             syncHidden(b.id, false);
@@ -329,7 +334,9 @@ export default function Home() {
                   </>
                 ) : (
                   <Pressable onPress={() => setShowHidden(true)} hitSlop={8} accessibilityRole="button">
-                    <Text style={styles.actLink}>{hiddenOnes.length} hidden · Show</Text>
+                    <Text style={styles.actLink}>
+                      {[declinedCount && `${declinedCount} no thanks`, hiddenOnes.length - declinedCount && `${hiddenOnes.length - declinedCount} hidden`].filter(Boolean).join(', ')} · Show
+                    </Text>
                   </Pressable>
                 ))}
             </View>
@@ -1072,7 +1079,9 @@ function MyBeaconCard({
   const when = whenLabel(start, end);
   // Who it went to and hasn't answered, loaded when the card opens (for Nudge).
   const [notAnswered, setNotAnswered] = useState<{ id: string; name: string }[]>([]);
-  const inKey = beacon.responses.map((r) => r.user_id).join(',');
+  // People who said No thanks aren't "not answered" and can't be nudged (decision 90).
+  const noThanks = (beacon.declines ?? []).map((d) => d.profiles?.full_name ?? 'A friend');
+  const inKey = [...beacon.responses.map((r) => r.user_id), ...(beacon.declines ?? []).map((d) => d.user_id)].join(',');
   useEffect(() => {
     if (open) fetchNotAnswered(beacon.id, inKey ? inKey.split(',') : []).then(setNotAnswered);
   }, [open, beacon.id, inKey]);
@@ -1173,6 +1182,7 @@ function MyBeaconCard({
           ) : (
             <Text style={styles.muted}>You&apos;ll get a buzz when someone taps &quot;I&apos;m in&quot;.</Text>
           )}
+          {noThanks.length > 0 && <Text style={styles.muted}>No thanks: {namesList(noThanks)}. Only you see this.</Text>}
           {/* Nudge whoever hasn't answered (decision 87). Not once it's locked: nobody new can join. */}
           {!locked && <NudgeList beaconId={beacon.id} people={notAnswered} />}
           {!locked && responders.length > 0 && (
