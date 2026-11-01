@@ -199,6 +199,19 @@ export function Button({
   );
 }
 
+/**
+ * A beacon's note (Warren, 1 Nov: no quote marks, and it should stand out): its own box with a
+ * thick coral edge, a small "Note from Kat" label and the words in bigger, bolder type.
+ */
+export function NoteBox({ note, from }: { note: string; from: string }) {
+  return (
+    <View style={styles.note}>
+      <Text style={styles.noteLabel}>{from === 'You' ? 'Your note' : `Note from ${from}`}</Text>
+      <Text style={styles.noteText}>{note}</Text>
+    </View>
+  );
+}
+
 /** Go back, or home if there's nowhere to go back to (opened from a notification). */
 export function goBack() {
   if (router.canGoBack()) router.back();
@@ -236,6 +249,9 @@ export function BackBar({ title, sub, onBack = goBack, right }: { title: string;
 }
 
 const styles = StyleSheet.create({
+  note: { backgroundColor: colors.cream, borderWidth: 2, borderColor: colors.ink, borderLeftWidth: 6, borderLeftColor: colors.accent, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 12, gap: 2 },
+  noteLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4, color: colors.muted },
+  noteText: { fontSize: 18, lineHeight: 23, fontWeight: '800' },
   backBar: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   backButton: { width: 42, height: 42, backgroundColor: colors.card, ...border, boxShadow: `2px 2px 0px ${colors.ink}`, alignItems: 'center', justifyContent: 'center' },
   backTitle: { fontSize: 24, lineHeight: 27, fontWeight: '800', letterSpacing: -0.5 },

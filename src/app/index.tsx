@@ -49,7 +49,7 @@ import { routeForBuzz, type BuzzData } from '@/lib/buzz';
 import { fetchNotAnswered, NudgeList, syncHidden } from '@/lib/nudge';
 import { WhenTag } from '@/lib/when';
 import { supabase } from '@/lib/supabase';
-import { border, Button, Chip, Chips, colors, ErrorText, Label, shadow, Text, TextInput } from '@/lib/ui';
+import { border, Button, Chip, Chips, colors, ErrorText, Label, NoteBox, shadow, Text, TextInput } from '@/lib/ui';
 
 
 const handledTaps = new Set<string>();
@@ -1150,7 +1150,7 @@ function MyBeaconCard({
 
       {open && (
         <View style={styles.mineBody}>
-          {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
+          {beacon.note ? <NoteBox note={beacon.note} from="You" /> : null}
           {locked && <Text style={styles.muted}>Locked in. Only {onlyWho} can see it, and nobody new can join.</Text>}
           {places.length > 0 && (
             <View style={{ gap: 8 }}>

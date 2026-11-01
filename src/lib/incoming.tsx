@@ -8,7 +8,7 @@ import { PlaceRow, placeName, PrefPicker, usePlaceNames, WherePicker } from './p
 import { PlanPerson } from './chatui';
 import { WhenTag } from './when';
 import { supabase } from './supabase';
-import { border, Button, colors, ErrorText, shadow, Text } from './ui';
+import { border, Button, colors, ErrorText, NoteBox, shadow, Text } from './ui';
 import { sentToLine, whosInLine } from './words';
 
 export type FriendBeacon = Awaited<ReturnType<typeof fetchFriendsBeacons>>[number];
@@ -101,7 +101,7 @@ export function IncomingBeacon({
           faded={!!going && going.position !== p.position}
         />
       ))}
-      {beacon.note ? <Text style={styles.quote}>“{beacon.note}”</Text> : null}
+      {beacon.note ? <NoteBox note={beacon.note} from={name} /> : null}
       <ErrorText>{error}</ErrorText>
       {locked ? (
         <>
